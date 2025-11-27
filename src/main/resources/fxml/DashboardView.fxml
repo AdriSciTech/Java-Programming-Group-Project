@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.financetracker.controller.DashboardController">
+
+    <top>
+        <HBox spacing="20" alignment="CENTER_LEFT">
+            <padding><Insets top="15" right="20" bottom="15" left="20"/></padding>
+            <Label text="Finance Tracker"><font><Font size="24"/></font></Label>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="welcomeLabel"><font><Font size="14"/></font></Label>
+            <Button text="Logout" onAction="#handleLogout"><font><Font size="12"/></font></Button>
+        </HBox>
+    </top>
+
+    <left>
+        <VBox spacing="5" prefWidth="200">
+            <padding><Insets top="20" right="10" bottom="20" left="10"/></padding>
+            <Label text="MENU"><font><Font size="12"/></font></Label>
+            <Button text="Dashboard" maxWidth="Infinity" prefHeight="40"/>
+            <Button text="Income" onAction="#handleIncome" maxWidth="Infinity" prefHeight="40"/>
+            <Button text="Expenses" onAction="#handleExpenses" maxWidth="Infinity" prefHeight="40"/>
+            <Button text="Budgets" onAction="#handleBudgets" maxWidth="Infinity" prefHeight="40"/>
+            <Button text="Analytics" onAction="#handleAnalytics" maxWidth="Infinity" prefHeight="40"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Button text="Settings" onAction="#handleSettings" maxWidth="Infinity" prefHeight="40"/>
+        </VBox>
+    </left>
+
+    <center>
+        <VBox spacing="20">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="Dashboard Overview"><font><Font size="22"/></font></Label>
+            <Label fx:id="dateLabel"><font><Font size="13"/></font></Label>
+            <HBox spacing="20">
+                <VBox spacing="10" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+                    <Label text="Total Income"><font><Font size="14"/></font></Label>
+                    <Label fx:id="totalIncomeLabel" text="\$0.00"><font><Font size="28"/></font></Label>
+                    <Label text="This Month"><font><Font size="12"/></font></Label>
+                </VBox>
+                <VBox spacing="10" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+                    <Label text="Total Expenses"><font><Font size="14"/></font></Label>
+                    <Label fx:id="totalExpenseLabel" text="\$0.00"><font><Font size="28"/></font></Label>
+                    <Label text="This Month"><font><Font size="12"/></font></Label>
+                </VBox>
+                <VBox spacing="10" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+                    <Label text="Net Balance"><font><Font size="14"/></font></Label>
+                    <Label fx:id="netBalanceLabel" text="\$0.00"><font><Font size="28"/></font></Label>
+                    <Label text="This Month"><font><Font size="12"/></font></Label>
+                </VBox>
+            </HBox>
+            <VBox spacing="15" VBox.vgrow="ALWAYS">
+                <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+                <Label text="Budget Status"><font><Font size="18"/></font></Label>
+                <Label fx:id="budgetStatusLabel" text="Loading..."><font><Font size="14"/></font></Label>
+                <Label text="No budget data available"><font><Font size="13"/></font></Label>
+            </VBox>
+        </VBox>
+    </center>
+</BorderPane>
