@@ -52,6 +52,36 @@ public class UserService {
     }
 
     /**
+     * Create a new user without password (for Supabase Auth users)
+     * Password is managed by Supabase Auth, not stored locally
+     */
+    public boolean createUserWithoutPassword(User user) {
+        String sql = "INSERT INTO users (user_id, email, password_hash, full_name, phone, " +
+                "currency_preference, is_active) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (email) DO NOTHING";
+
+        try (Connection conn = supabaseClient.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setObject(1, user.getUserId());
+            pstmt.setString(2, user.getEmail());
+            pstmt.setString(3, "SUPABASE_AUTH"); // Placeholder - password managed by Supabase
+            pstmt.setString(4, user.getFullName());
+            pstmt.setString(5, user.getPhone());
+            pstmt.setString(6, user.getCurrencyPreference() != null ? user.getCurrencyPreference() : "USD");
+            pstmt.setBoolean(7, true);
+
+            int rowsAffected = pstmt.executeUpdate();
+            logger.info("User created (Supabase Auth): {}", user.getEmail());
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            logger.error("Error creating user", e);
+            return false;
+        }
+    }
+
+    /**
      * Authenticate user - Supabase Auth already verified password
      * This method just retrieves the user from database
      */
@@ -65,8 +95,6 @@ public class UserService {
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
-                // Password already verified by Supabase Auth in LoginController
-                // Just retrieve and return the user
                 User user = mapResultSetToUser(rs);
                 logger.info("User authenticated and found in database: {}", email);
                 return user;
@@ -128,6 +156,29 @@ public class UserService {
     }
 
     /**
+     * Check if email already exists in database
+     */
+    public boolean emailExists(String email) {
+        String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
+
+        try (Connection conn = supabaseClient.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, email);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+
+        } catch (SQLException e) {
+            logger.error("Error checking email existence", e);
+        }
+
+        return false;
+    }
+
+    /**
      * Update user information
      */
     public boolean updateUser(User user) {
@@ -157,7 +208,6 @@ public class UserService {
      * Change user password
      */
     public boolean changePassword(UUID userId, String oldPassword, String newPassword) {
-        // First verify old password
         User user = getUserById(userId);
         if (user == null) {
             return false;
@@ -175,9 +225,8 @@ public class UserService {
             if (rs.next()) {
                 String storedHash = rs.getString("password_hash");
 
-                // Only verify if hash exists
-                if (storedHash != null && !storedHash.isEmpty()) {
-                    // Verify old password
+                // Only verify if hash exists and is not the Supabase placeholder
+                if (storedHash != null && !storedHash.isEmpty() && !storedHash.equals("SUPABASE_AUTH")) {
                     if (!BCrypt.checkpw(oldPassword, storedHash)) {
                         logger.warn("Old password incorrect for user: {}", userId);
                         return false;
@@ -219,8 +268,9 @@ public class UserService {
 
         } catch (SQLException e) {
             logger.error("Error deactivating user", e);
-            return false;
         }
+
+        return false;
     }
 
     /**
