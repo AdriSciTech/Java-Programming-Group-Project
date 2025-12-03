@@ -214,6 +214,10 @@ public class BillController {
         TextField vendorField = new TextField();
         vendorField.setPromptText("Vendor name");
 
+        TextArea descriptionArea = new TextArea();
+        descriptionArea.setPromptText("Optional description");
+        descriptionArea.setPrefRowCount(2);
+
         if (existingBill != null) {
             nameField.setText(existingBill.getName());
             amountField.setText(existingBill.getAmount().toString());
@@ -223,6 +227,9 @@ public class BillController {
             endDatePicker.setValue(existingBill.getEndDate());
             reminderField.setText(String.valueOf(existingBill.getReminderDays()));
             vendorField.setText(existingBill.getVendor());
+            if (existingBill.getDescription() != null) {
+                descriptionArea.setText(existingBill.getDescription());
+            }
 
             if (existingBill.getCategoryId() != null) {
                 for (Category cat : expenseCategories) {
@@ -252,6 +259,8 @@ public class BillController {
         grid.add(reminderField, 1, 7);
         grid.add(new Label("Vendor:"), 0, 8);
         grid.add(vendorField, 1, 8);
+        grid.add(new Label("Description:"), 0, 9);
+        grid.add(descriptionArea, 1, 9);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -324,6 +333,7 @@ public class BillController {
                     bill.setEndDate(endDatePicker.getValue());
                     bill.setReminderDays(reminderDays);
                     bill.setVendor(vendorField.getText().trim());
+                    bill.setDescription(descriptionArea.getText().trim().isEmpty() ? null : descriptionArea.getText().trim());
 
                     if (categoryCombo.getValue() != null) {
                         bill.setCategoryId(categoryCombo.getValue().getCategoryId());

@@ -120,3 +120,7 @@ htmlcov/
 
 # JavaFX specific
 /.attach_pid*
+
+# Build artifacts with machine-specific paths
+classpath.txt
+run.sh
