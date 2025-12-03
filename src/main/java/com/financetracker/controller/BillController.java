@@ -4,9 +4,11 @@ import com.financetracker.model.Bill;
 import com.financetracker.model.Category;
 import com.financetracker.service.BillService;
 import com.financetracker.service.CategoryService;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -67,6 +69,9 @@ public class BillController {
 
         amountColumn.setCellValueFactory(cellData -> {
             BigDecimal amount = cellData.getValue().getAmount();
+            if (amount == null) {
+                return new SimpleStringProperty("$0.00");
+            }
             return new SimpleStringProperty(String.format("$%,.2f", amount));
         });
         amountColumn.setStyle("-fx-alignment: CENTER-RIGHT;");
@@ -99,14 +104,31 @@ public class BillController {
     private void loadBillData() {
         if (currentUserId == null) return;
 
-        try {
-            expenseCategories = categoryService.getExpenseCategories(currentUserId);
-            List<Bill> bills = billService.getBillsByUser(currentUserId);
-            billList.setAll(bills);
-        } catch (Exception e) {
-            logger.error("Error loading bill data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load bill data: " + e.getMessage());
-        }
+        // Run database operations in background thread for performance
+        Task<Void> loadTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                expenseCategories = categoryService.getExpenseCategories(currentUserId);
+                List<Bill> bills = billService.getBillsByUser(currentUserId);
+                
+                // Update UI on JavaFX thread
+                Platform.runLater(() -> {
+                    billList.setAll(bills);
+                    billTable.refresh();
+                });
+                return null;
+            }
+        };
+
+        loadTask.setOnFailed(e -> {
+            logger.error("Error loading bill data", loadTask.getException());
+            Platform.runLater(() -> {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                    "Failed to load bill data: " + loadTask.getException().getMessage());
+            });
+        });
+
+        new Thread(loadTask).start();
     }
 
     @FXML
@@ -140,12 +162,38 @@ public class BillController {
 
         Optional<ButtonType> result = confirm.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            if (billService.deleteBill(selected.getBillId())) {
-                billList.remove(selected);
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Bill deleted successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete bill.");
-            }
+            UUID billId = selected.getBillId();
+            
+            // Run delete in background thread
+            Task<Boolean> deleteTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    return billService.deleteBill(billId);
+                }
+            };
+
+            deleteTask.setOnSucceeded(e -> {
+                boolean success = deleteTask.getValue();
+                Platform.runLater(() -> {
+                    if (success) {
+                        billList.remove(selected);
+                        billTable.refresh();
+                        showAlert(Alert.AlertType.INFORMATION, "Success", "Bill deleted successfully.");
+                    } else {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete bill.");
+                    }
+                });
+            });
+
+            deleteTask.setOnFailed(e -> {
+                logger.error("Error deleting bill", deleteTask.getException());
+                Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                        "Failed to delete bill: " + deleteTask.getException().getMessage());
+                });
+            });
+
+            new Thread(deleteTask).start();
         }
     }
 
@@ -352,21 +400,43 @@ public class BillController {
 
         Optional<Bill> result = dialog.showAndWait();
         result.ifPresent(bill -> {
-            boolean success;
-            if (existingBill == null) {
-                success = billService.createBill(bill);
-            } else {
-                success = billService.updateBill(bill);
-            }
+            // Run database operation in background thread
+            Task<Boolean> saveTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    if (existingBill == null) {
+                        return billService.createBill(bill);
+                    } else {
+                        return billService.updateBill(bill);
+                    }
+                }
+            };
 
-            if (success) {
-                loadBillData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
-                        "Bill " + (existingBill == null ? "added" : "updated") + " successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
-                        "Failed to " + (existingBill == null ? "add" : "update") + " bill.");
-            }
+            saveTask.setOnSucceeded(e -> {
+                boolean success = saveTask.getValue();
+                if (success) {
+                    loadBillData();
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.INFORMATION, "Success",
+                                "Bill " + (existingBill == null ? "added" : "updated") + " successfully.");
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "Error",
+                                "Failed to " + (existingBill == null ? "add" : "update") + " bill.");
+                    });
+                }
+            });
+
+            saveTask.setOnFailed(e -> {
+                logger.error("Error saving bill", saveTask.getException());
+                Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.ERROR, "Error",
+                            "Failed to save bill: " + saveTask.getException().getMessage());
+                });
+            });
+
+            new Thread(saveTask).start();
         });
     }
 

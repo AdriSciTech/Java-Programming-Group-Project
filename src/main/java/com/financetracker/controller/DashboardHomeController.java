@@ -5,6 +5,8 @@ import com.financetracker.service.AccountService;
 import com.financetracker.service.BillService;
 import com.financetracker.service.ExpenseService;
 import com.financetracker.service.IncomeService;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.chart.PieChart;
 import javafx.scene.control.Label;
@@ -62,13 +64,10 @@ public class DashboardHomeController {
             return;
         }
 
-        try {
-            loadSummaryCards();
-            loadNextBill();
-            loadExpensePieChart();
-        } catch (Exception e) {
-            logger.error("Error loading dashboard data", e);
-        }
+        // Load all data in background threads for better performance
+        loadSummaryCards();
+        loadNextBill();
+        loadExpensePieChart();
     }
 
     /**
@@ -79,35 +78,73 @@ public class DashboardHomeController {
         LocalDate monthStart = now.withDayOfMonth(1);
         LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
 
-        // Calculate monthly income
-        BigDecimal monthlyIncome = incomeService.getTotalIncome(currentUserId, monthStart, monthEnd);
-        if (monthlyIncomeLabel != null) {
-            monthlyIncomeLabel.setText(String.format("$%,.2f", monthlyIncome));
-        }
-
-        // Calculate monthly expenses
-        BigDecimal monthlyExpenses = expenseService.getTotalExpenses(currentUserId, monthStart, monthEnd);
-        if (monthlyExpenseLabel != null) {
-            monthlyExpenseLabel.setText(String.format("$%,.2f", monthlyExpenses));
-        }
-
-        // Calculate monthly savings
-        BigDecimal monthlySavings = monthlyIncome.subtract(monthlyExpenses);
-        if (monthlySavingsLabel != null) {
-            monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
-        }
-
-        // Calculate total balance from all accounts
-        List<com.financetracker.model.Account> accounts = accountService.getAccountsByUser(currentUserId);
-        BigDecimal totalBalance = BigDecimal.ZERO;
-        for (com.financetracker.model.Account account : accounts) {
-            if (account.isActive()) {
-                totalBalance = totalBalance.add(account.getBalance());
+        // Run all database operations in parallel background threads
+        Task<BigDecimal> incomeTask = new Task<BigDecimal>() {
+            @Override
+            protected BigDecimal call() throws Exception {
+                return incomeService.getTotalIncome(currentUserId, monthStart, monthEnd);
             }
-        }
-        if (totalBalanceLabel != null) {
-            totalBalanceLabel.setText(String.format("$%,.2f", totalBalance));
-        }
+        };
+
+        Task<BigDecimal> expenseTask = new Task<BigDecimal>() {
+            @Override
+            protected BigDecimal call() throws Exception {
+                return expenseService.getTotalExpenses(currentUserId, monthStart, monthEnd);
+            }
+        };
+
+        Task<List<com.financetracker.model.Account>> accountTask = new Task<List<com.financetracker.model.Account>>() {
+            @Override
+            protected List<com.financetracker.model.Account> call() throws Exception {
+                return accountService.getAccountsByUser(currentUserId);
+            }
+        };
+
+        incomeTask.setOnSucceeded(e -> {
+            BigDecimal monthlyIncome = incomeTask.getValue();
+            Platform.runLater(() -> {
+                if (monthlyIncomeLabel != null) {
+                    monthlyIncomeLabel.setText(String.format("$%,.2f", monthlyIncome));
+                }
+            });
+        });
+
+        expenseTask.setOnSucceeded(e -> {
+            BigDecimal monthlyExpenses = expenseTask.getValue();
+            Platform.runLater(() -> {
+                if (monthlyExpenseLabel != null) {
+                    monthlyExpenseLabel.setText(String.format("$%,.2f", monthlyExpenses));
+                }
+                // Calculate savings when both are ready
+                if (incomeTask.isDone() && incomeTask.getValue() != null) {
+                    BigDecimal monthlySavings = incomeTask.getValue().subtract(monthlyExpenses);
+                    if (monthlySavingsLabel != null) {
+                        monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
+                    }
+                }
+            });
+        });
+
+        accountTask.setOnSucceeded(e -> {
+            List<com.financetracker.model.Account> accounts = accountTask.getValue();
+            BigDecimal totalBalance = BigDecimal.ZERO;
+            for (com.financetracker.model.Account account : accounts) {
+                if (account != null && account.isActive() && account.getBalance() != null) {
+                    totalBalance = totalBalance.add(account.getBalance());
+                }
+            }
+            final BigDecimal finalBalance = totalBalance;
+            Platform.runLater(() -> {
+                if (totalBalanceLabel != null) {
+                    totalBalanceLabel.setText(String.format("$%,.2f", finalBalance));
+                }
+            });
+        });
+
+        // Start all tasks in parallel
+        new Thread(incomeTask).start();
+        new Thread(expenseTask).start();
+        new Thread(accountTask).start();
     }
 
     /**
@@ -116,27 +153,45 @@ public class DashboardHomeController {
     private void loadNextBill() {
         if (nextBillLabel == null) return;
 
-        try {
-            List<Bill> upcomingBills = billService.getUpcomingBills(currentUserId, 30);
-            if (upcomingBills != null && !upcomingBills.isEmpty()) {
-                Bill nextBill = upcomingBills.get(0);
-                LocalDate nextPaymentDate = nextBill.getNextPaymentDate();
-                if (nextPaymentDate != null) {
-                    nextBillLabel.setText(nextBill.getName() + " - " + 
-                        String.format("$%,.2f", nextBill.getAmount()) + 
-                        " due " + nextPaymentDate.format(
-                            java.time.format.DateTimeFormatter.ofPattern("MMM dd")));
-                } else {
-                    nextBillLabel.setText(nextBill.getName() + " - " + 
-                        String.format("$%,.2f", nextBill.getAmount()) + " (ended)");
-                }
-            } else {
-                nextBillLabel.setText("No upcoming bills");
+        Task<List<Bill>> billTask = new Task<List<Bill>>() {
+            @Override
+            protected List<Bill> call() throws Exception {
+                return billService.getUpcomingBills(currentUserId, 30);
             }
-        } catch (Exception e) {
-            logger.error("Error loading next bill", e);
-            nextBillLabel.setText("Unable to load bills");
-        }
+        };
+
+        billTask.setOnSucceeded(e -> {
+            List<Bill> upcomingBills = billTask.getValue();
+            Platform.runLater(() -> {
+                if (upcomingBills != null && !upcomingBills.isEmpty()) {
+                    Bill nextBill = upcomingBills.get(0);
+                    LocalDate nextPaymentDate = nextBill.getNextPaymentDate();
+                    BigDecimal amount = nextBill.getAmount();
+                    if (amount == null) amount = BigDecimal.ZERO;
+                    
+                    if (nextPaymentDate != null) {
+                        nextBillLabel.setText(nextBill.getName() + " - " + 
+                            String.format("$%,.2f", amount) + 
+                            " due " + nextPaymentDate.format(
+                                java.time.format.DateTimeFormatter.ofPattern("MMM dd")));
+                    } else {
+                        nextBillLabel.setText(nextBill.getName() + " - " + 
+                            String.format("$%,.2f", amount) + " (ended)");
+                    }
+                } else {
+                    nextBillLabel.setText("No upcoming bills");
+                }
+            });
+        });
+
+        billTask.setOnFailed(e -> {
+            logger.error("Error loading next bill", billTask.getException());
+            Platform.runLater(() -> {
+                nextBillLabel.setText("Unable to load bills");
+            });
+        });
+
+        new Thread(billTask).start();
     }
 
     /**
@@ -145,14 +200,20 @@ public class DashboardHomeController {
     private void loadExpensePieChart() {
         if (expensePieChart == null) return;
 
-        try {
-            LocalDate now = LocalDate.now();
-            LocalDate monthStart = now.withDayOfMonth(1);
-            LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
+        LocalDate now = LocalDate.now();
+        LocalDate monthStart = now.withDayOfMonth(1);
+        LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
 
-            List<com.financetracker.model.Expense> expenses = expenseService.getExpensesByDateRange(
-                    currentUserId, monthStart, monthEnd);
+        Task<List<com.financetracker.model.Expense>> expenseTask = new Task<List<com.financetracker.model.Expense>>() {
+            @Override
+            protected List<com.financetracker.model.Expense> call() throws Exception {
+                return expenseService.getExpensesByDateRange(currentUserId, monthStart, monthEnd);
+            }
+        };
 
+        expenseTask.setOnSucceeded(e -> {
+            List<com.financetracker.model.Expense> expenses = expenseTask.getValue();
+            
             // Group by category
             java.util.Map<String, BigDecimal> categoryTotals = new java.util.HashMap<>();
             for (com.financetracker.model.Expense expense : expenses) {
@@ -163,21 +224,27 @@ public class DashboardHomeController {
                 }
             }
 
-            // Create pie chart data (top 5 categories)
-            expensePieChart.getData().clear();
-            categoryTotals.entrySet().stream()
-                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-                .limit(5)
-                .forEach(entry -> {
-                    double value = entry.getValue().doubleValue();
-                    if (value > 0) {
-                        expensePieChart.getData().add(
-                            new javafx.scene.chart.PieChart.Data(entry.getKey(), value));
-                    }
-                });
-        } catch (Exception e) {
-            logger.error("Error loading expense pie chart", e);
-        }
+            // Create pie chart data (top 5 categories) on JavaFX thread
+            Platform.runLater(() -> {
+                expensePieChart.getData().clear();
+                categoryTotals.entrySet().stream()
+                    .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                    .limit(5)
+                    .forEach(entry -> {
+                        double value = entry.getValue().doubleValue();
+                        if (value > 0) {
+                            expensePieChart.getData().add(
+                                new javafx.scene.chart.PieChart.Data(entry.getKey(), value));
+                        }
+                    });
+            });
+        });
+
+        expenseTask.setOnFailed(e -> {
+            logger.error("Error loading expense pie chart", expenseTask.getException());
+        });
+
+        new Thread(expenseTask).start();
     }
 
     public void setCurrentUserId(UUID userId) {

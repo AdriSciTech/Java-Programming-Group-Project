@@ -4,9 +4,11 @@ import com.financetracker.model.Category;
 import com.financetracker.model.Expense;
 import com.financetracker.service.CategoryService;
 import com.financetracker.service.ExpenseService;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -171,17 +173,25 @@ public class ExpenseController {
             return;
         }
 
-        try {
-            // Load categories for dropdown
-            expenseCategories = categoryService.getExpenseCategories(currentUserId);
+        // Run database operations in background thread for performance
+        Task<Void> loadTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                expenseCategories = categoryService.getExpenseCategories(currentUserId);
+                applyFilter();
+                return null;
+            }
+        };
 
-            // Apply current filter
-            applyFilter();
+        loadTask.setOnFailed(e -> {
+            logger.error("Error loading expense data", loadTask.getException());
+            Platform.runLater(() -> {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                    "Failed to load expense data: " + loadTask.getException().getMessage());
+            });
+        });
 
-        } catch (Exception e) {
-            logger.error("Error loading expense data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load expense data: " + e.getMessage());
-        }
+        new Thread(loadTask).start();
     }
 
     /**
@@ -226,15 +236,40 @@ public class ExpenseController {
                 break;
         }
 
-        // Update date pickers
-        if (fromDatePicker != null) fromDatePicker.setValue(startDate);
-        if (toDatePicker != null) toDatePicker.setValue(endDate);
+        // Update date pickers on JavaFX thread
+        final LocalDate finalStartDate = startDate;
+        final LocalDate finalEndDate = endDate;
+        Platform.runLater(() -> {
+            if (fromDatePicker != null) fromDatePicker.setValue(finalStartDate);
+            if (toDatePicker != null) toDatePicker.setValue(finalEndDate);
+        });
 
-        // Load filtered data
-        List<Expense> filteredExpenses = expenseService.getExpensesByDateRange(currentUserId, startDate, endDate);
-        expenseList.setAll(filteredExpenses);
+        // Load filtered data in background
+        Task<List<Expense>> filterTask = new Task<List<Expense>>() {
+            @Override
+            protected List<Expense> call() throws Exception {
+                return expenseService.getExpensesByDateRange(currentUserId, finalStartDate, finalEndDate);
+            }
+        };
 
-        updateSummary();
+        filterTask.setOnSucceeded(e -> {
+            List<Expense> filteredExpenses = filterTask.getValue();
+            Platform.runLater(() -> {
+                expenseList.setAll(filteredExpenses);
+                expenseTable.refresh();
+                updateSummary();
+            });
+        });
+
+        filterTask.setOnFailed(e -> {
+            logger.error("Error filtering expenses", filterTask.getException());
+            Platform.runLater(() -> {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                    "Failed to filter expenses: " + filterTask.getException().getMessage());
+            });
+        });
+
+        new Thread(filterTask).start();
     }
 
     /**
@@ -246,9 +281,32 @@ public class ExpenseController {
             return;
         }
 
-        List<Expense> searchResults = expenseService.searchExpenses(currentUserId, searchText);
-        expenseList.setAll(searchResults);
-        updateSummary();
+        // Run search in background thread
+        Task<List<Expense>> searchTask = new Task<List<Expense>>() {
+            @Override
+            protected List<Expense> call() throws Exception {
+                return expenseService.searchExpenses(currentUserId, searchText);
+            }
+        };
+
+        searchTask.setOnSucceeded(e -> {
+            List<Expense> searchResults = searchTask.getValue();
+            Platform.runLater(() -> {
+                expenseList.setAll(searchResults);
+                expenseTable.refresh();
+                updateSummary();
+            });
+        });
+
+        searchTask.setOnFailed(e -> {
+            logger.error("Error searching expenses", searchTask.getException());
+            Platform.runLater(() -> {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                    "Failed to search expenses: " + searchTask.getException().getMessage());
+            });
+        });
+
+        new Thread(searchTask).start();
     }
 
     /**
@@ -257,17 +315,7 @@ public class ExpenseController {
     private void updateSummary() {
         if (currentUserId == null) return;
 
-        LocalDate now = LocalDate.now();
-        LocalDate monthStart = now.withDayOfMonth(1);
-        LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
-
-        // Calculate monthly expenses
-        BigDecimal monthlyTotal = expenseService.getTotalExpenses(currentUserId, monthStart, monthEnd);
-        if (monthlyExpenseLabel != null) {
-            monthlyExpenseLabel.setText(String.format("$%,.2f", monthlyTotal));
-        }
-
-        // Calculate total from current filter/table
+        // Calculate total from current filter/table (fast, no DB call)
         BigDecimal tableTotal = BigDecimal.ZERO;
         for (Expense expense : expenseList) {
             if (expense != null && expense.getAmount() != null) {
@@ -277,6 +325,29 @@ public class ExpenseController {
         if (totalExpenseLabel != null) {
             totalExpenseLabel.setText(String.format("$%,.2f", tableTotal));
         }
+
+        // Calculate monthly expenses in background
+        LocalDate now = LocalDate.now();
+        LocalDate monthStart = now.withDayOfMonth(1);
+        LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
+
+        Task<BigDecimal> monthlyTask = new Task<BigDecimal>() {
+            @Override
+            protected BigDecimal call() throws Exception {
+                return expenseService.getTotalExpenses(currentUserId, monthStart, monthEnd);
+            }
+        };
+
+        monthlyTask.setOnSucceeded(e -> {
+            BigDecimal monthlyTotal = monthlyTask.getValue();
+            Platform.runLater(() -> {
+                if (monthlyExpenseLabel != null) {
+                    monthlyExpenseLabel.setText(String.format("$%,.2f", monthlyTotal));
+                }
+            });
+        });
+
+        new Thread(monthlyTask).start();
     }
 
     /**
@@ -321,13 +392,39 @@ public class ExpenseController {
 
         Optional<ButtonType> result = confirm.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            if (expenseService.deleteExpense(selected.getExpenseId())) {
-                expenseList.remove(selected);
-                updateSummary();
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Expense entry deleted successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete expense entry.");
-            }
+            UUID expenseId = selected.getExpenseId();
+            
+            // Run delete in background thread
+            Task<Boolean> deleteTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    return expenseService.deleteExpense(expenseId);
+                }
+            };
+
+            deleteTask.setOnSucceeded(e -> {
+                boolean success = deleteTask.getValue();
+                Platform.runLater(() -> {
+                    if (success) {
+                        expenseList.remove(selected);
+                        expenseTable.refresh();
+                        updateSummary();
+                        showAlert(Alert.AlertType.INFORMATION, "Success", "Expense entry deleted successfully.");
+                    } else {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete expense entry.");
+                    }
+                });
+            });
+
+            deleteTask.setOnFailed(e -> {
+                logger.error("Error deleting expense", deleteTask.getException());
+                Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                        "Failed to delete expense: " + deleteTask.getException().getMessage());
+                });
+            });
+
+            new Thread(deleteTask).start();
         }
     }
 
@@ -490,21 +587,43 @@ public class ExpenseController {
         // Show dialog and process result
         Optional<Expense> result = dialog.showAndWait();
         result.ifPresent(expense -> {
-            boolean success;
-            if (existingExpense == null) {
-                success = expenseService.createExpense(expense);
-            } else {
-                success = expenseService.updateExpense(expense);
-            }
+            // Run database operation in background thread
+            Task<Boolean> saveTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    if (existingExpense == null) {
+                        return expenseService.createExpense(expense);
+                    } else {
+                        return expenseService.updateExpense(expense);
+                    }
+                }
+            };
 
-            if (success) {
-                loadExpenseData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
-                        "Expense " + (existingExpense == null ? "added" : "updated") + " successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
-                        "Failed to " + (existingExpense == null ? "add" : "update") + " expense.");
-            }
+            saveTask.setOnSucceeded(e -> {
+                boolean success = saveTask.getValue();
+                if (success) {
+                    loadExpenseData();
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.INFORMATION, "Success",
+                                "Expense " + (existingExpense == null ? "added" : "updated") + " successfully.");
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "Error",
+                                "Failed to " + (existingExpense == null ? "add" : "update") + " expense.");
+                    });
+                }
+            });
+
+            saveTask.setOnFailed(e -> {
+                logger.error("Error saving expense", saveTask.getException());
+                Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.ERROR, "Error",
+                            "Failed to save expense: " + saveTask.getException().getMessage());
+                });
+            });
+
+            new Thread(saveTask).start();
         });
     }
 
