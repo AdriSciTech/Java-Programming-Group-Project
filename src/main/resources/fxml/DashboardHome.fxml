@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.PieChart?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Font?>
 
 <VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.financetracker.controller.DashboardHomeController"
       spacing="20" alignment="TOP_CENTER" styleClass="main-content">
 
     <padding>
@@ -32,7 +34,7 @@
             <Label text="Total Balance" styleClass="card-title">
                 <font><Font size="12"/></font>
             </Label>
-            <Label text="$0.00" styleClass="card-value">
+            <Label fx:id="totalBalanceLabel" text="$0.00" styleClass="card-value">
                 <font><Font size="24" name="System Bold"/></font>
             </Label>
         </VBox>
@@ -43,7 +45,7 @@
             <Label text="Monthly Income" styleClass="card-title">
                 <font><Font size="12"/></font>
             </Label>
-            <Label text="$0.00" styleClass="income-value">
+            <Label fx:id="monthlyIncomeLabel" text="$0.00" styleClass="income-value">
                 <font><Font size="24" name="System Bold"/></font>
             </Label>
         </VBox>
@@ -54,7 +56,7 @@
             <Label text="Monthly Expenses" styleClass="card-title">
                 <font><Font size="12"/></font>
             </Label>
-            <Label text="$0.00" styleClass="expense-value">
+            <Label fx:id="monthlyExpenseLabel" text="$0.00" styleClass="expense-value">
                 <font><Font size="24" name="System Bold"/></font>
             </Label>
         </VBox>
@@ -65,7 +67,7 @@
             <Label text="Monthly Savings" styleClass="card-title">
                 <font><Font size="12"/></font>
             </Label>
-            <Label text="$0.00" styleClass="card-value">
+            <Label fx:id="monthlySavingsLabel" text="$0.00" styleClass="card-value">
                 <font><Font size="24" name="System Bold"/></font>
             </Label>
         </VBox>
@@ -87,20 +89,26 @@
         </HBox>
     </VBox>
 
-    <!-- Recent Activity Section -->
-    <VBox spacing="10" VBox.vgrow="ALWAYS">
-        <padding><Insets top="30"/></padding>
-
-        <Label text="Recent Activity" styleClass="section-title">
-            <font><Font size="16" name="System Bold"/></font>
-        </Label>
-
-        <VBox styleClass="content-section" VBox.vgrow="ALWAYS">
+    <!-- Next Bill and Chart Section -->
+    <HBox spacing="20" VBox.vgrow="ALWAYS">
+        <!-- Next Bill Card -->
+        <VBox spacing="10" styleClass="content-section" prefWidth="300">
             <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
-            <Label text="No recent transactions. Start by adding your first income or expense!"
-                   styleClass="placeholder-text" alignment="CENTER" maxWidth="Infinity">
-                <font><Font size="13"/></font>
+            <Label text="Next Upcoming Bill" styleClass="section-title">
+                <font><Font size="16" name="System Bold"/></font>
+            </Label>
+            <Label fx:id="nextBillLabel" text="No upcoming bills" styleClass="card-value" wrapText="true">
+                <font><Font size="14"/></font>
             </Label>
         </VBox>
-    </VBox>
+
+        <!-- Mini Pie Chart -->
+        <VBox spacing="10" styleClass="content-section" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="Expenses by Category (This Month)" styleClass="section-title">
+                <font><Font size="16" name="System Bold"/></font>
+            </Label>
+            <PieChart fx:id="expensePieChart" VBox.vgrow="ALWAYS" prefHeight="250"/>
+        </VBox>
+    </HBox>
 </VBox>

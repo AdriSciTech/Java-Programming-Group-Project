@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.financetracker.controller.InvestmentController"
+      spacing="20" styleClass="main-content">
+
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <!-- Header Section -->
+    <HBox spacing="20" alignment="CENTER_LEFT">
+        <VBox spacing="5">
+            <Label text="Investment Portfolio" styleClass="page-title">
+                <font><Font size="24" name="System Bold"/></font>
+            </Label>
+            <Label text="Track your investments and returns" styleClass="subtitle">
+                <font><Font size="13"/></font>
+            </Label>
+        </VBox>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button text="+ Add Investment" onAction="#handleAddInvestment" styleClass="primary-button" prefHeight="40">
+            <font><Font size="14"/></font>
+        </Button>
+    </HBox>
+
+    <!-- Summary Cards -->
+    <HBox spacing="20">
+        <VBox spacing="10" styleClass="summary-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="Portfolio Value" styleClass="card-title">
+                <font><Font size="13"/></font>
+            </Label>
+            <Label fx:id="portfolioValueLabel" text="$0.00" styleClass="card-value">
+                <font><Font size="28" name="System Bold"/></font>
+            </Label>
+        </VBox>
+
+        <VBox spacing="10" styleClass="summary-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="Total ROI" styleClass="card-title">
+                <font><Font size="13"/></font>
+            </Label>
+            <Label fx:id="totalROILabel" text="$0.00" styleClass="card-value">
+                <font><Font size="28" name="System Bold"/></font>
+            </Label>
+        </VBox>
+    </HBox>
+
+    <!-- Investment Table -->
+    <VBox VBox.vgrow="ALWAYS" styleClass="content-section">
+        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+
+        <TableView fx:id="investmentTable" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="nameColumn" text="Name" prefWidth="200"/>
+                <TableColumn fx:id="typeColumn" text="Type" prefWidth="120"/>
+                <TableColumn fx:id="symbolColumn" text="Symbol" prefWidth="100"/>
+                <TableColumn fx:id="quantityColumn" text="Quantity" prefWidth="100"/>
+                <TableColumn fx:id="purchasePriceColumn" text="Purchase Price" prefWidth="120"/>
+                <TableColumn fx:id="currentPriceColumn" text="Current Price" prefWidth="120"/>
+                <TableColumn fx:id="roiColumn" text="ROI" prefWidth="120"/>
+            </columns>
+            <placeholder>
+                <Label text="No investments found. Click '+ Add Investment' to add your first investment."/>
+            </placeholder>
+        </TableView>
+    </VBox>
+
+    <!-- Action Buttons -->
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Button text="Edit Selected" onAction="#handleEditInvestment" styleClass="secondary-button"/>
+        <Button text="Delete Selected" onAction="#handleDeleteInvestment" styleClass="danger-button"/>
+    </HBox>
+</VBox>

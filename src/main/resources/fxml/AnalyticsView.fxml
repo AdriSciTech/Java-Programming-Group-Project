@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.financetracker.controller.AnalyticsController"
+      spacing="20" styleClass="main-content">
+
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <!-- Header Section -->
+    <VBox spacing="5">
+        <Label text="Analytics & Reports" styleClass="page-title">
+            <font><Font size="24" name="System Bold"/></font>
+        </Label>
+        <Label text="Visualize your financial data" styleClass="subtitle">
+            <font><Font size="13"/></font>
+        </Label>
+    </VBox>
+
+    <!-- Charts Grid -->
+    <GridPane hgap="20" vgap="20" VBox.vgrow="ALWAYS">
+        <!-- Pie Chart - Expenses by Category -->
+        <VBox GridPane.columnIndex="0" GridPane.rowIndex="0" styleClass="content-section" prefWidth="400">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <PieChart fx:id="expenseCategoryChart" VBox.vgrow="ALWAYS" prefHeight="300"/>
+        </VBox>
+
+        <!-- Line Chart - Income vs Expenses -->
+        <VBox GridPane.columnIndex="1" GridPane.rowIndex="0" styleClass="content-section" prefWidth="500">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <LineChart fx:id="incomeExpenseChart" VBox.vgrow="ALWAYS" prefHeight="300">
+                <xAxis>
+                    <CategoryAxis label="Month"/>
+                </xAxis>
+                <yAxis>
+                    <NumberAxis label="Amount ($)"/>
+                </yAxis>
+            </LineChart>
+        </VBox>
+
+        <!-- Bar Chart - Monthly Totals -->
+        <VBox GridPane.columnIndex="0" GridPane.columnSpan="2" GridPane.rowIndex="1" styleClass="content-section" prefWidth="900">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <BarChart fx:id="monthlyTotalsChart" VBox.vgrow="ALWAYS" prefHeight="300">
+                <xAxis>
+                    <CategoryAxis label="Month"/>
+                </xAxis>
+                <yAxis>
+                    <NumberAxis label="Amount ($)"/>
+                </yAxis>
+            </BarChart>
+        </VBox>
+    </GridPane>
+</VBox>

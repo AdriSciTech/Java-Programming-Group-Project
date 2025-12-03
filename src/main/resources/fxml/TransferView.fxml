@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.financetracker.controller.TransferController"
+      spacing="20" styleClass="main-content">
+
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <!-- Header Section -->
+    <HBox spacing="20" alignment="CENTER_LEFT">
+        <VBox spacing="5">
+            <Label text="Transfer Management" styleClass="page-title">
+                <font><Font size="24" name="System Bold"/></font>
+            </Label>
+            <Label text="Transfer money between accounts" styleClass="subtitle">
+                <font><Font size="13"/></font>
+            </Label>
+        </VBox>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button text="+ Add Transfer" onAction="#handleAddTransfer" styleClass="primary-button" prefHeight="40">
+            <font><Font size="14"/></font>
+        </Button>
+    </HBox>
+
+    <!-- Transfer Table -->
+    <VBox VBox.vgrow="ALWAYS" styleClass="content-section">
+        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+
+        <TableView fx:id="transferTable" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="dateColumn" text="Date" prefWidth="120"/>
+                <TableColumn fx:id="fromColumn" text="From Account" prefWidth="200"/>
+                <TableColumn fx:id="toColumn" text="To Account" prefWidth="200"/>
+                <TableColumn fx:id="amountColumn" text="Amount" prefWidth="120"/>
+                <TableColumn fx:id="descriptionColumn" text="Description" prefWidth="250"/>
+            </columns>
+            <placeholder>
+                <Label text="No transfers found. Click '+ Add Transfer' to add your first transfer."/>
+            </placeholder>
+        </TableView>
+    </VBox>
+
+    <!-- Action Buttons -->
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Button text="Edit Selected" onAction="#handleEditTransfer" styleClass="secondary-button"/>
+        <Button text="Delete Selected" onAction="#handleDeleteTransfer" styleClass="danger-button"/>
+    </HBox>
+</VBox>

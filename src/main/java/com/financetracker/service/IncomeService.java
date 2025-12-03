@@ -395,7 +395,12 @@ public class IncomeService {
         income.setAmount(rs.getBigDecimal("amount"));
         income.setSource(rs.getString("source"));
         income.setDescription(rs.getString("description"));
-        income.setIncomeDate(rs.getDate("income_date").toLocalDate());
+        
+        Date incomeDate = rs.getDate("income_date");
+        if (incomeDate != null) {
+            income.setIncomeDate(incomeDate.toLocalDate());
+        }
+        
         income.setRecurring(rs.getBoolean("is_recurring"));
         income.setRecurringFrequency(rs.getString("recurring_frequency"));
 

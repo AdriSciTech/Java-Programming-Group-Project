@@ -194,7 +194,7 @@ public class ExpenseService {
     /**
      * Get total expenses for a user in a date range
      */
-    public double getTotalExpenses(UUID userId, LocalDate startDate, LocalDate endDate) {
+    public java.math.BigDecimal getTotalExpenses(UUID userId, LocalDate startDate, LocalDate endDate) {
         String sql = "SELECT COALESCE(SUM(amount), 0) as total " +
                      "FROM expenses " +
                      "WHERE user_id = ? AND expense_date BETWEEN ? AND ?";
@@ -208,14 +208,103 @@ public class ExpenseService {
             ResultSet rs = pstmt.executeQuery();
             
             if (rs.next()) {
-                return rs.getDouble("total");
+                return rs.getBigDecimal("total");
             }
             
         } catch (SQLException e) {
             logger.error("Error getting total expenses", e);
         }
         
-        return 0.0;
+        return java.math.BigDecimal.ZERO;
+    }
+    
+    /**
+     * Search expenses by vendor
+     */
+    public List<Expense> searchExpensesByVendor(UUID userId, String searchTerm) {
+        List<Expense> expenses = new ArrayList<>();
+        String sql = "SELECT e.*, c.category_name " +
+                     "FROM expenses e " +
+                     "LEFT JOIN categories c ON e.category_id = c.category_id " +
+                     "WHERE e.user_id = ? AND LOWER(e.vendor) LIKE LOWER(?) " +
+                     "ORDER BY e.expense_date DESC";
+        
+        try (Connection conn = supabaseClient.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setObject(1, userId);
+            pstmt.setString(2, "%" + searchTerm + "%");
+            ResultSet rs = pstmt.executeQuery();
+            
+            while (rs.next()) {
+                expenses.add(mapResultSetToExpense(rs));
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error searching expenses by vendor", e);
+        }
+        
+        return expenses;
+    }
+    
+    /**
+     * Search expenses by description
+     */
+    public List<Expense> searchExpensesByDescription(UUID userId, String searchTerm) {
+        List<Expense> expenses = new ArrayList<>();
+        String sql = "SELECT e.*, c.category_name " +
+                     "FROM expenses e " +
+                     "LEFT JOIN categories c ON e.category_id = c.category_id " +
+                     "WHERE e.user_id = ? AND LOWER(e.description) LIKE LOWER(?) " +
+                     "ORDER BY e.expense_date DESC";
+        
+        try (Connection conn = supabaseClient.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setObject(1, userId);
+            pstmt.setString(2, "%" + searchTerm + "%");
+            ResultSet rs = pstmt.executeQuery();
+            
+            while (rs.next()) {
+                expenses.add(mapResultSetToExpense(rs));
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error searching expenses by description", e);
+        }
+        
+        return expenses;
+    }
+    
+    /**
+     * Search expenses by vendor or description
+     */
+    public List<Expense> searchExpenses(UUID userId, String searchTerm) {
+        List<Expense> expenses = new ArrayList<>();
+        String sql = "SELECT e.*, c.category_name " +
+                     "FROM expenses e " +
+                     "LEFT JOIN categories c ON e.category_id = c.category_id " +
+                     "WHERE e.user_id = ? AND (LOWER(e.vendor) LIKE LOWER(?) OR LOWER(e.description) LIKE LOWER(?)) " +
+                     "ORDER BY e.expense_date DESC";
+        
+        try (Connection conn = supabaseClient.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            String searchPattern = "%" + searchTerm + "%";
+            pstmt.setObject(1, userId);
+            pstmt.setString(2, searchPattern);
+            pstmt.setString(3, searchPattern);
+            ResultSet rs = pstmt.executeQuery();
+            
+            while (rs.next()) {
+                expenses.add(mapResultSetToExpense(rs));
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error searching expenses", e);
+        }
+        
+        return expenses;
     }
     
     /**
@@ -229,7 +318,12 @@ public class ExpenseService {
         expense.setAmount(rs.getBigDecimal("amount"));
         expense.setVendor(rs.getString("vendor"));
         expense.setDescription(rs.getString("description"));
-        expense.setExpenseDate(rs.getDate("expense_date").toLocalDate());
+        
+        Date expenseDate = rs.getDate("expense_date");
+        if (expenseDate != null) {
+            expense.setExpenseDate(expenseDate.toLocalDate());
+        }
+        
         expense.setPaymentMethod(rs.getString("payment_method"));
         expense.setReceiptUrl(rs.getString("receipt_url"));
         expense.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
