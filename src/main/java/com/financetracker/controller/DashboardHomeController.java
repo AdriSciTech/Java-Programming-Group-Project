@@ -61,6 +61,12 @@ public class DashboardHomeController {
     private void loadDashboardData() {
         if (currentUserId == null) {
             logger.warn("No user logged in, cannot load dashboard data");
+            // Still show default values even if not logged in
+            if (totalBalanceLabel != null) totalBalanceLabel.setText("$0.00");
+            if (monthlyIncomeLabel != null) monthlyIncomeLabel.setText("$0.00");
+            if (monthlyExpenseLabel != null) monthlyExpenseLabel.setText("$0.00");
+            if (monthlySavingsLabel != null) monthlySavingsLabel.setText("$0.00");
+            if (nextBillLabel != null) nextBillLabel.setText("No upcoming bills");
             return;
         }
 
@@ -102,25 +108,65 @@ public class DashboardHomeController {
 
         incomeTask.setOnSucceeded(e -> {
             BigDecimal monthlyIncome = incomeTask.getValue();
+            if (monthlyIncome == null) monthlyIncome = BigDecimal.ZERO;
+            final BigDecimal finalIncome = monthlyIncome;
             Platform.runLater(() -> {
                 if (monthlyIncomeLabel != null) {
-                    monthlyIncomeLabel.setText(String.format("$%,.2f", monthlyIncome));
+                    monthlyIncomeLabel.setText(String.format("$%,.2f", finalIncome));
+                }
+                // Calculate savings if expenses are already loaded
+                if (expenseTask.isDone() && expenseTask.getValue() != null) {
+                    BigDecimal monthlySavings = finalIncome.subtract(expenseTask.getValue());
+                    if (monthlySavingsLabel != null) {
+                        monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
+                    }
+                } else if (expenseTask.isDone()) {
+                    BigDecimal monthlySavings = finalIncome.subtract(BigDecimal.ZERO);
+                    if (monthlySavingsLabel != null) {
+                        monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
+                    }
+                }
+            });
+        });
+        
+        incomeTask.setOnFailed(e -> {
+            logger.error("Error loading income", incomeTask.getException());
+            Platform.runLater(() -> {
+                if (monthlyIncomeLabel != null) {
+                    monthlyIncomeLabel.setText("$0.00");
                 }
             });
         });
 
         expenseTask.setOnSucceeded(e -> {
             BigDecimal monthlyExpenses = expenseTask.getValue();
+            if (monthlyExpenses == null) monthlyExpenses = BigDecimal.ZERO;
+            final BigDecimal finalExpenses = monthlyExpenses;
             Platform.runLater(() -> {
                 if (monthlyExpenseLabel != null) {
-                    monthlyExpenseLabel.setText(String.format("$%,.2f", monthlyExpenses));
+                    monthlyExpenseLabel.setText(String.format("$%,.2f", finalExpenses));
                 }
                 // Calculate savings when both are ready
                 if (incomeTask.isDone() && incomeTask.getValue() != null) {
-                    BigDecimal monthlySavings = incomeTask.getValue().subtract(monthlyExpenses);
+                    BigDecimal monthlySavings = incomeTask.getValue().subtract(finalExpenses);
                     if (monthlySavingsLabel != null) {
                         monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
                     }
+                } else if (incomeTask.isDone()) {
+                    // If income is done but null, use zero
+                    BigDecimal monthlySavings = BigDecimal.ZERO.subtract(finalExpenses);
+                    if (monthlySavingsLabel != null) {
+                        monthlySavingsLabel.setText(String.format("$%,.2f", monthlySavings));
+                    }
+                }
+            });
+        });
+        
+        expenseTask.setOnFailed(e -> {
+            logger.error("Error loading expenses", expenseTask.getException());
+            Platform.runLater(() -> {
+                if (monthlyExpenseLabel != null) {
+                    monthlyExpenseLabel.setText("$0.00");
                 }
             });
         });
@@ -128,15 +174,26 @@ public class DashboardHomeController {
         accountTask.setOnSucceeded(e -> {
             List<com.financetracker.model.Account> accounts = accountTask.getValue();
             BigDecimal totalBalance = BigDecimal.ZERO;
-            for (com.financetracker.model.Account account : accounts) {
-                if (account != null && account.isActive() && account.getBalance() != null) {
-                    totalBalance = totalBalance.add(account.getBalance());
+            if (accounts != null) {
+                for (com.financetracker.model.Account account : accounts) {
+                    if (account != null && account.isActive() && account.getBalance() != null) {
+                        totalBalance = totalBalance.add(account.getBalance());
+                    }
                 }
             }
             final BigDecimal finalBalance = totalBalance;
             Platform.runLater(() -> {
                 if (totalBalanceLabel != null) {
                     totalBalanceLabel.setText(String.format("$%,.2f", finalBalance));
+                }
+            });
+        });
+        
+        accountTask.setOnFailed(e -> {
+            logger.error("Error loading accounts", accountTask.getException());
+            Platform.runLater(() -> {
+                if (totalBalanceLabel != null) {
+                    totalBalanceLabel.setText("$0.00");
                 }
             });
         });
@@ -227,16 +284,22 @@ public class DashboardHomeController {
             // Create pie chart data (top 5 categories) on JavaFX thread
             Platform.runLater(() -> {
                 expensePieChart.getData().clear();
-                categoryTotals.entrySet().stream()
-                    .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-                    .limit(5)
-                    .forEach(entry -> {
-                        double value = entry.getValue().doubleValue();
-                        if (value > 0) {
-                            expensePieChart.getData().add(
-                                new javafx.scene.chart.PieChart.Data(entry.getKey(), value));
-                        }
-                    });
+                if (categoryTotals.isEmpty()) {
+                    // Show empty state message
+                    expensePieChart.setTitle("No expenses this month");
+                } else {
+                    expensePieChart.setTitle(null);
+                    categoryTotals.entrySet().stream()
+                        .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                        .limit(5)
+                        .forEach(entry -> {
+                            double value = entry.getValue().doubleValue();
+                            if (value > 0) {
+                                expensePieChart.getData().add(
+                                    new javafx.scene.chart.PieChart.Data(entry.getKey(), value));
+                            }
+                        });
+                }
             });
         });
 

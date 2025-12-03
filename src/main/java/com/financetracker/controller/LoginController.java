@@ -9,6 +9,7 @@ import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,17 +33,21 @@ public class LoginController {
     @FXML private PasswordField passwordField;
     @FXML private Button loginButton;
     @FXML private Label errorLabel;
-    @FXML private Label signupLabel;
+    @FXML private Label signupLabel; // Legacy?
     @FXML private ProgressIndicator loadingIndicator;
     @FXML private Label connectionStatusLabel;
 
-    // FXML Components - Registration (if using combined view)
+    // FXML Components - Registration
     @FXML private VBox loginForm;
     @FXML private VBox registerForm;
     @FXML private TextField regEmailField;
     @FXML private TextField regNameField;
     @FXML private PasswordField regPasswordField;
     @FXML private PasswordField regConfirmPasswordField;
+    @FXML private Button registerButton;
+
+    // FXML Components - Shared
+    @FXML private StackPane loadingOverlay;
 
     // Services
     private UserService userService;
@@ -59,7 +64,9 @@ public class LoginController {
         if (errorLabel != null) {
             errorLabel.setVisible(false);
         }
-        if (loadingIndicator != null) {
+        if (loadingOverlay != null) {
+            loadingOverlay.setVisible(false);
+        } else if (loadingIndicator != null) {
             loadingIndicator.setVisible(false);
         }
 
@@ -79,19 +86,20 @@ public class LoginController {
      */
     private void testSupabaseConnection() {
         if (connectionStatusLabel != null) {
-            connectionStatusLabel.setText("● Testing connection...");
-            connectionStatusLabel.setStyle("-fx-text-fill: #FFA500;"); // Orange
+            connectionStatusLabel.setText("Testing connection...");
+            connectionStatusLabel.setStyle("-fx-text-fill: #F59E0B;"); // Amber
         }
 
         Task<Boolean> connectionTask = new Task<>() {
             @Override
             protected Boolean call() throws Exception {
-                Connection conn = supabaseClient.getConnection();
-                if (conn != null && !conn.isClosed()) {
-                    conn.close();
-                    return true;
+                // SupabaseClient now uses HikariCP, so this should be fast if pool is ready
+                try (Connection conn = supabaseClient.getConnection()) {
+                    return conn != null && !conn.isClosed();
+                } catch (Exception e) {
+                    logger.error("Connection test failed", e);
+                    return false;
                 }
-                return false;
             }
         };
 
@@ -100,12 +108,12 @@ public class LoginController {
             Platform.runLater(() -> {
                 if (connectionStatusLabel != null) {
                     if (connected) {
-                        connectionStatusLabel.setText("● Connected to Supabase");
-                        connectionStatusLabel.setStyle("-fx-text-fill: #5CB85C;"); // Green
-                        logger.info("✓ Supabase connection successful");
+                        connectionStatusLabel.setText("Connected to Supabase");
+                        connectionStatusLabel.setStyle("-fx-text-fill: #059669;"); // Emerald Green
+                        logger.info("Supabase connection successful");
                     } else {
-                        connectionStatusLabel.setText("● Connection failed");
-                        connectionStatusLabel.setStyle("-fx-text-fill: #D9534F;"); // Red
+                        connectionStatusLabel.setText("Connection failed");
+                        connectionStatusLabel.setStyle("-fx-text-fill: #DC2626;"); // Red
                     }
                 }
             });
@@ -113,11 +121,11 @@ public class LoginController {
 
         connectionTask.setOnFailed(event -> {
             Throwable ex = connectionTask.getException();
-            logger.error("✗ Supabase connection failed", ex);
+            logger.error("Supabase connection failed task", ex);
             Platform.runLater(() -> {
                 if (connectionStatusLabel != null) {
-                    connectionStatusLabel.setText("● Connection failed");
-                    connectionStatusLabel.setStyle("-fx-text-fill: #D9534F;"); // Red
+                    connectionStatusLabel.setText("Connection failed");
+                    connectionStatusLabel.setStyle("-fx-text-fill: #DC2626;"); // Red
                 }
             });
         });
@@ -127,12 +135,6 @@ public class LoginController {
 
     /**
      * Handle login button click
-     *
-     * Supabase Auth Flow:
-     * 1. Authenticate with Supabase Auth API (email/password)
-     * 2. On success, Supabase returns JWT token and user info
-     * 3. Fetch additional user data from our 'users' table
-     * 4. Store user session for the application
      */
     @FXML
     private void handleLogin() {
@@ -161,27 +163,24 @@ public class LoginController {
                 logger.info("Attempting login for: {}", email);
 
                 // Step 1: Authenticate with Supabase Auth
-                // This validates credentials against Supabase's auth.users table
                 logger.info("Step 1: Authenticating with Supabase Auth...");
                 try {
                     boolean authSuccess = supabaseClient.signIn(email, password);
                     if (!authSuccess) {
                         throw new IOException("Invalid login credentials");
                     }
-                    logger.info("✓ Supabase Auth successful, token received");
+                    logger.info("Supabase Auth successful");
                 } catch (IOException e) {
-                    logger.error("✗ Supabase Auth failed: {}", e.getMessage());
+                    logger.error("Supabase Auth failed: {}", e.getMessage());
                     throw new IOException("Invalid email or password");
                 }
 
                 // Step 2: Get user from our application's users table
-                // The users table stores additional profile info (name, preferences, etc.)
                 logger.info("Step 2: Fetching user profile from database...");
                 User user = userService.getUserByEmail(email);
 
                 if (user == null) {
                     // User exists in Supabase Auth but not in our users table
-                    // This can happen if user was created directly in Supabase dashboard
                     logger.warn("User authenticated but not found in users table");
 
                     // Auto-create user profile in our table
@@ -192,19 +191,17 @@ public class LoginController {
                     user.setCurrencyPreference("USD");
                     user.setActive(true);
 
-                    // We don't store password in our table - Supabase Auth handles that
-                    // Just create a placeholder hash or use Supabase user ID
                     boolean created = userService.createUserWithoutPassword(user);
 
                     if (created) {
                         user = userService.getUserByEmail(email);
-                        logger.info("✓ User profile created in database");
+                        logger.info("User profile created in database");
                     } else {
-                        throw new SQLException("Failed to create user profile");
+                        throw new SQLException("Failed to create user profile in database");
                     }
                 }
 
-                logger.info("✓ Login successful for: {}", user.getEmail());
+                logger.info("Login successful for: {}", user.getEmail());
                 return user;
             }
         };
@@ -271,7 +268,6 @@ public class LoginController {
             registerForm.setManaged(true);
             hideError();
         } else {
-            // If forms aren't separate, show a dialog
             showRegistrationDialog();
         }
     }
@@ -294,11 +290,6 @@ public class LoginController {
 
     /**
      * Handle registration form submission
-     *
-     * Supabase Auth Registration Flow:
-     * 1. Create user in Supabase Auth (handles password hashing, email verification)
-     * 2. Create corresponding user profile in our 'users' table
-     * 3. User may need to confirm email before logging in (depending on Supabase settings)
      */
     @FXML
     private void handleRegister() {
@@ -342,14 +333,13 @@ public class LoginController {
                 logger.info("Attempting registration for: {}", email);
 
                 // Step 1: Register with Supabase Auth
-                // This creates user in auth.users and handles password hashing
                 logger.info("Step 1: Creating user in Supabase Auth...");
                 boolean authCreated = supabaseClient.signUp(email, password);
 
                 if (!authCreated) {
                     throw new Exception("Failed to create account. Email may already be registered.");
                 }
-                logger.info("✓ User created in Supabase Auth");
+                logger.info("User created in Supabase Auth");
 
                 // Step 2: Create user profile in our users table
                 logger.info("Step 2: Creating user profile in database...");
@@ -363,10 +353,10 @@ public class LoginController {
 
                 if (!profileCreated) {
                     logger.warn("User created in Auth but failed to create profile");
-                    // Still return true - user can login and profile will be auto-created
+                    // We don't throw here, just log it. The profile will be auto-created on first login.
                 }
 
-                logger.info("✓ Registration successful for: {}", email);
+                logger.info("Registration successful for: {}", email);
                 return true;
             }
         };
@@ -375,10 +365,9 @@ public class LoginController {
             Platform.runLater(() -> {
                 setLoading(false);
                 if (registerTask.getValue()) {
-                    showSuccess("Account created successfully! Please check your email to confirm, then log in.");
+                    showSuccess("Account created! Check your email to confirm, then log in.");
                     handleShowLogin();
 
-                    // Pre-fill email field for convenience
                     if (emailField != null) {
                         emailField.setText(email);
                     }
@@ -415,7 +404,6 @@ public class LoginController {
         ButtonType registerButtonType = new ButtonType("Register", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(registerButtonType, ButtonType.CANCEL);
 
-        // Create form fields
         VBox content = new VBox(10);
         content.setStyle("-fx-padding: 20;");
 
@@ -442,7 +430,6 @@ public class LoginController {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == registerButtonType) {
-                // Validate
                 if (emailField.getText().isEmpty() || passwordField.getText().isEmpty()) {
                     showError("Email and password are required");
                     return null;
@@ -456,13 +443,11 @@ public class LoginController {
                     return null;
                 }
 
-                // Set the registration fields and trigger registration
                 if (regEmailField != null) regEmailField.setText(emailField.getText());
                 if (regNameField != null) regNameField.setText(nameField.getText());
                 if (regPasswordField != null) regPasswordField.setText(passwordField.getText());
                 if (regConfirmPasswordField != null) regConfirmPasswordField.setText(confirmField.getText());
 
-                // Create temp user object to signal success
                 User tempUser = new User();
                 tempUser.setEmail(emailField.getText());
                 tempUser.setFullName(nameField.getText());
@@ -472,9 +457,7 @@ public class LoginController {
         });
 
         dialog.showAndWait().ifPresent(user -> {
-            // Perform registration with dialog values
-            performRegistration(user.getEmail(), user.getFullName(),
-                    confirmField.getText()); // Using confirmField as it has the password
+            performRegistration(user.getEmail(), user.getFullName(), confirmField.getText());
         });
     }
 
@@ -585,7 +568,6 @@ public class LoginController {
             return "User";
         }
         String namePart = email.split("@")[0];
-        // Capitalize first letter and replace dots/underscores with spaces
         namePart = namePart.replace(".", " ").replace("_", " ");
         if (!namePart.isEmpty()) {
             namePart = namePart.substring(0, 1).toUpperCase() + namePart.substring(1);
@@ -599,7 +581,7 @@ public class LoginController {
     private void showError(String message) {
         if (errorLabel != null) {
             errorLabel.setText(message);
-            errorLabel.setStyle("-fx-text-fill: #D9534F;"); // Red
+            errorLabel.setStyle("-fx-text-fill: #DC2626; -fx-background-color: rgba(220, 38, 38, 0.1); -fx-padding: 8; -fx-background-radius: 4;");
             errorLabel.setVisible(true);
         }
     }
@@ -610,7 +592,7 @@ public class LoginController {
     private void showSuccess(String message) {
         if (errorLabel != null) {
             errorLabel.setText(message);
-            errorLabel.setStyle("-fx-text-fill: #5CB85C;"); // Green
+            errorLabel.setStyle("-fx-text-fill: #059669; -fx-background-color: rgba(5, 150, 105, 0.1); -fx-padding: 8; -fx-background-radius: 4;");
             errorLabel.setVisible(true);
         }
     }
@@ -628,11 +610,17 @@ public class LoginController {
      * Set loading state
      */
     private void setLoading(boolean loading) {
-        if (loadingIndicator != null) {
+        if (loadingOverlay != null) {
+            loadingOverlay.setVisible(loading);
+        } else if (loadingIndicator != null) {
             loadingIndicator.setVisible(loading);
         }
+        
         if (loginButton != null) {
             loginButton.setDisable(loading);
+        }
+        if (registerButton != null) {
+            registerButton.setDisable(loading);
         }
     }
 
@@ -651,32 +639,19 @@ public class LoginController {
     // Static methods for session management
     // ============================================
 
-    /**
-     * Get current logged-in user (static access for other controllers)
-     */
     public static User getCurrentUser() {
         return currentUser;
     }
 
-    /**
-     * Set current user (for testing or programmatic login)
-     */
     public static void setCurrentUser(User user) {
         currentUser = user;
     }
 
-    /**
-     * Clear current user (for logout)
-     */
     public static void clearCurrentUser() {
         currentUser = null;
-        // Also sign out from Supabase
         SupabaseClient.getInstance().signOut();
     }
 
-    /**
-     * Check if a user is currently logged in
-     */
     public static boolean isLoggedIn() {
         return currentUser != null;
     }

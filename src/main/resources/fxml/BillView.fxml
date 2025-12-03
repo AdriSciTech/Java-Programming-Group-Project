@@ -16,7 +16,7 @@
     <!-- Header Section -->
     <HBox spacing="20" alignment="CENTER_LEFT">
         <VBox spacing="5">
-            <Label text="Bills & Subscriptions" styleClass="page-title">
+            <Label text="Bills &amp; Subscriptions" styleClass="page-title">
                 <font><Font size="24" name="System Bold"/></font>
             </Label>
             <Label text="Manage recurring bills and subscriptions" styleClass="subtitle">

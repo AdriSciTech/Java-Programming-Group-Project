@@ -4,6 +4,7 @@ import com.financetracker.model.Bill;
 import com.financetracker.model.Category;
 import com.financetracker.service.BillService;
 import com.financetracker.service.CategoryService;
+import com.financetracker.util.UIUtils;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -123,7 +124,7 @@ public class BillController {
         loadTask.setOnFailed(e -> {
             logger.error("Error loading bill data", loadTask.getException());
             Platform.runLater(() -> {
-                showAlert(Alert.AlertType.ERROR, "Error", 
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                     "Failed to load bill data: " + loadTask.getException().getMessage());
             });
         });
@@ -140,7 +141,7 @@ public class BillController {
     private void handleEditBill() {
         Bill selected = billTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to edit.");
             return;
         }
         showBillDialog(selected);
@@ -150,7 +151,7 @@ public class BillController {
     private void handleDeleteBill() {
         Bill selected = billTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to delete.");
             return;
         }
 
@@ -178,9 +179,9 @@ public class BillController {
                     if (success) {
                         billList.remove(selected);
                         billTable.refresh();
-                        showAlert(Alert.AlertType.INFORMATION, "Success", "Bill deleted successfully.");
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Bill deleted successfully.");
                     } else {
-                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete bill.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete bill.");
                     }
                 });
             });
@@ -188,7 +189,7 @@ public class BillController {
             deleteTask.setOnFailed(e -> {
                 logger.error("Error deleting bill", deleteTask.getException());
                 Platform.runLater(() -> {
-                    showAlert(Alert.AlertType.ERROR, "Error", 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                         "Failed to delete bill: " + deleteTask.getException().getMessage());
                 });
             });
@@ -201,16 +202,16 @@ public class BillController {
     private void handleCancelBill() {
         Bill selected = billTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to cancel.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a bill to cancel.");
             return;
         }
 
         if (billService.cancelBill(selected.getBillId())) {
             selected.setActive(false);
             billTable.refresh();
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Bill cancelled successfully.");
+            UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Bill cancelled successfully.");
         } else {
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to cancel bill.");
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to cancel bill.");
         }
     }
 
@@ -218,6 +219,16 @@ public class BillController {
         Dialog<Bill> dialog = new Dialog<>();
         dialog.setTitle(existingBill == null ? "Add Bill" : "Edit Bill");
         dialog.setHeaderText(existingBill == null ? "Enter bill details" : "Update bill details");
+        
+        // Set owner window to prevent black tab glitch
+        if (billTable.getScene() != null && billTable.getScene().getWindow() != null) {
+            dialog.initOwner(billTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
@@ -316,19 +327,19 @@ public class BillController {
             if (dialogButton == saveButtonType) {
                 try {
                     if (nameField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Name is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Name is required.");
                         return null;
                     }
 
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(amountField.getText().replace(",", ""));
+                        amount = UIUtils.parseBigDecimal(amountField.getText());
                         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
                         return null;
                     }
 
@@ -336,11 +347,11 @@ public class BillController {
                     try {
                         dueDay = Integer.parseInt(dueDayField.getText());
                         if (dueDay < 1 || dueDay > 28) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Due day must be between 1 and 28.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Due day must be between 1 and 28.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid due day format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid due day format.");
                         return null;
                     }
 
@@ -352,22 +363,22 @@ public class BillController {
                         } else {
                             reminderDays = Integer.parseInt(reminderText);
                             if (reminderDays < 0) {
-                                showAlert(Alert.AlertType.ERROR, "Validation Error", "Reminder days must be 0 or greater.");
+                                UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Reminder days must be 0 or greater.");
                                 return null;
                             }
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid reminder days format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid reminder days format.");
                         return null;
                     }
 
                     if (startDatePicker.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Start date is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Start date is required.");
                         return null;
                     }
 
                     if (cycleCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Billing cycle is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Billing cycle is required.");
                         return null;
                     }
 
@@ -391,7 +402,7 @@ public class BillController {
                     return bill;
                 } catch (Exception e) {
                     logger.error("Error creating bill object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save bill: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save bill: " + e.getMessage());
                     return null;
                 }
             }
@@ -417,12 +428,12 @@ public class BillController {
                 if (success) {
                     loadBillData();
                     Platform.runLater(() -> {
-                        showAlert(Alert.AlertType.INFORMATION, "Success",
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                                 "Bill " + (existingBill == null ? "added" : "updated") + " successfully.");
                     });
                 } else {
                     Platform.runLater(() -> {
-                        showAlert(Alert.AlertType.ERROR, "Error",
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                                 "Failed to " + (existingBill == null ? "add" : "update") + " bill.");
                     });
                 }
@@ -431,21 +442,13 @@ public class BillController {
             saveTask.setOnFailed(e -> {
                 logger.error("Error saving bill", saveTask.getException());
                 Platform.runLater(() -> {
-                    showAlert(Alert.AlertType.ERROR, "Error",
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                             "Failed to save bill: " + saveTask.getException().getMessage());
                 });
             });
 
             new Thread(saveTask).start();
         });
-    }
-
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 
     public void setCurrentUserId(UUID userId) {

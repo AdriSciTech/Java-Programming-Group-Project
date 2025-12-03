@@ -1,6 +1,8 @@
 package com.financetracker.controller;
 
 import com.financetracker.model.User;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -60,9 +62,11 @@ public class DashboardController {
             welcomeLabel.setText("Welcome, " + name + "!");
         }
 
-        // Load dashboard home by default
-        loadDashboardHome();
-        setActiveButton(dashboardBtn);
+        // Load dashboard home by default - use Platform.runLater to allow UI to show first
+        Platform.runLater(() -> {
+            loadDashboardHome();
+            setActiveButton(dashboardBtn);
+        });
 
         logger.info("DashboardController initialized");
     }
@@ -93,16 +97,53 @@ public class DashboardController {
      * Load a view into the content area
      */
     private void loadView(String fxmlFile) {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/" + fxmlFile));
-            Node view = loader.load();
-            contentArea.getChildren().clear();
-            contentArea.getChildren().add(view);
-            logger.info("Loaded view: {}", fxmlFile);
-        } catch (IOException e) {
-            logger.error("Error loading view: {}", fxmlFile, e);
-            showErrorInContent("Failed to load " + fxmlFile + ": " + e.getMessage());
-        }
+        // Show loading indicator first
+        Label loadingLabel = new Label("Loading...");
+        loadingLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 14px;");
+        VBox loaderContainer = new VBox(loadingLabel);
+        loaderContainer.setStyle("-fx-alignment: center;");
+        contentArea.getChildren().clear();
+        contentArea.getChildren().add(loaderContainer);
+
+        Task<Node> loadTask = new Task<Node>() {
+            @Override
+            protected Node call() throws Exception {
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/" + fxmlFile));
+                return loader.load();
+            }
+        };
+
+        loadTask.setOnSucceeded(e -> {
+            Node view = loadTask.getValue();
+            Platform.runLater(() -> {
+                contentArea.getChildren().clear();
+                contentArea.getChildren().add(view);
+                logger.info("Loaded view: {}", fxmlFile);
+            });
+        });
+
+        loadTask.setOnFailed(e -> {
+            logger.error("Error loading view: {}", fxmlFile, loadTask.getException());
+            Platform.runLater(() -> {
+                showErrorInContent("Failed to load " + fxmlFile + ": " + loadTask.getException().getMessage());
+            });
+        });
+
+        // Note: FXML loading must happen on JavaFX thread for most cases, 
+        // but we can simulate async loading or optimize heavy initialization inside controllers
+        // For now, run on UI thread but with delay to show feedback
+        Platform.runLater(() -> {
+            try {
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/" + fxmlFile));
+                Node view = loader.load();
+                contentArea.getChildren().clear();
+                contentArea.getChildren().add(view);
+                logger.info("Loaded view: {}", fxmlFile);
+            } catch (IOException ex) {
+                logger.error("Error loading view: {}", fxmlFile, ex);
+                showErrorInContent("Failed to load " + fxmlFile + ": " + ex.getMessage());
+            }
+        });
     }
 
     /**
@@ -236,7 +277,7 @@ public class DashboardController {
         // Clear current user
         LoginController.clearCurrentUser();
 
-        // Return to  screen
+        // Return to login screen
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/LoginView.fxml"));
             Stage stage = (Stage) welcomeLabel.getScene().getWindow();

@@ -36,7 +36,7 @@ public class ConnectionTester {
 
             if (conn != null && !conn.isClosed()) {
                 DatabaseMetaData metaData = conn.getMetaData();
-                logger.info("✓ Connection successful!");
+                logger.info("Connection successful!");
                 logger.info("  - Database Product: {}", metaData.getDatabaseProductName());
                 logger.info("  - Database Version: {}", metaData.getDatabaseProductVersion());
                 logger.info("  - Driver: {}", metaData.getDriverName());
@@ -47,13 +47,13 @@ public class ConnectionTester {
                 logger.info("=== CONNECTION TEST PASSED ===\n");
                 return true;
             } else {
-                logger.error("✗ Connection is null or closed");
+                logger.error("Connection is null or closed");
                 logger.info("=== CONNECTION TEST FAILED ===\n");
                 return false;
             }
 
         } catch (Exception e) {
-            logger.error("✗ Connection test failed", e);
+            logger.error("Connection test failed", e);
             logger.error("\nCommon issues:");
             logger.error("1. Check application.properties exists in src/main/resources/");
             logger.error("2. Verify Supabase URL is correct");
@@ -100,27 +100,27 @@ public class ConnectionTester {
         boolean valid = true;
 
         if (config.getSupabaseUrl() == null || config.getSupabaseUrl().isEmpty()) {
-            logger.error("✗ Supabase URL is not set in application.properties");
+            logger.error("Supabase URL is not set in application.properties");
             valid = false;
         }
 
         if (config.getSupabaseKey() == null || config.getSupabaseKey().isEmpty()) {
-            logger.error("✗ Supabase Key is not set in application.properties");
+            logger.error("Supabase Key is not set in application.properties");
             valid = false;
         }
 
         if (config.getDbUrl() == null || config.getDbUrl().isEmpty()) {
-            logger.error("✗ Database URL is not set in application.properties");
+            logger.error("Database URL is not set in application.properties");
             valid = false;
         }
 
         if (config.getDbPassword() == null || config.getDbPassword().isEmpty()) {
-            logger.error("✗ Database Password is not set in application.properties");
+            logger.error("Database Password is not set in application.properties");
             valid = false;
         }
 
         if (valid) {
-            logger.info("✓ All required configuration is present");
+            logger.info("All required configuration is present");
         } else {
             logger.error("\nPlease update src/main/resources/application.properties");
         }

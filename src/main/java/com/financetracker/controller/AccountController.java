@@ -2,6 +2,7 @@ package com.financetracker.controller;
 
 import com.financetracker.model.Account;
 import com.financetracker.service.AccountService;
+import com.financetracker.util.UIUtils;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -92,7 +93,7 @@ public class AccountController {
             accountList.setAll(accounts);
         } catch (Exception e) {
             logger.error("Error loading account data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load account data: " + e.getMessage());
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to load account data: " + e.getMessage());
         }
     }
 
@@ -105,7 +106,7 @@ public class AccountController {
     private void handleEditAccount() {
         Account selected = accountTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to edit.");
             return;
         }
         showAccountDialog(selected);
@@ -115,7 +116,7 @@ public class AccountController {
     private void handleDeleteAccount() {
         Account selected = accountTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to delete.");
             return;
         }
 
@@ -129,9 +130,9 @@ public class AccountController {
         if (result.isPresent() && result.get() == ButtonType.OK) {
             if (accountService.deleteAccount(selected.getAccountId())) {
                 accountList.remove(selected);
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Account deleted successfully.");
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Account deleted successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete account.");
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete account.");
             }
         }
     }
@@ -140,16 +141,16 @@ public class AccountController {
     private void handleToggleActive() {
         Account selected = accountTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account.");
             return;
         }
 
         selected.setActive(!selected.isActive());
         if (accountService.updateAccount(selected)) {
             accountTable.refresh();
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Account status updated.");
+            UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Account status updated.");
         } else {
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to update account status.");
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to update account status.");
         }
     }
 
@@ -157,6 +158,16 @@ public class AccountController {
         Dialog<Account> dialog = new Dialog<>();
         dialog.setTitle(existingAccount == null ? "Add Account" : "Edit Account");
         dialog.setHeaderText(existingAccount == null ? "Enter account details" : "Update account details");
+        
+        // Set owner window to prevent black tab glitch
+        if (accountTable.getScene() != null && accountTable.getScene().getWindow() != null) {
+            dialog.initOwner(accountTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
@@ -220,20 +231,20 @@ public class AccountController {
             if (dialogButton == saveButtonType) {
                 try {
                     if (nameField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Account name is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Account name is required.");
                         return null;
                     }
 
                     BigDecimal balance;
                     try {
-                        balance = new BigDecimal(balanceField.getText().replace(",", ""));
+                        balance = UIUtils.parseBigDecimal(balanceField.getText());
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid balance format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid balance format.");
                         return null;
                     }
 
                     if (typeCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Account type is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Account type is required.");
                         return null;
                     }
 
@@ -250,7 +261,7 @@ public class AccountController {
                     return account;
                 } catch (Exception e) {
                     logger.error("Error creating account object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save account: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save account: " + e.getMessage());
                     return null;
                 }
             }
@@ -268,22 +279,15 @@ public class AccountController {
 
             if (success) {
                 loadAccountData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                         "Account " + (existingAccount == null ? "added" : "updated") + " successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                         "Failed to " + (existingAccount == null ? "add" : "update") + " account.");
             }
         });
     }
 
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     public void setCurrentUserId(UUID userId) {
         this.currentUserId = userId;

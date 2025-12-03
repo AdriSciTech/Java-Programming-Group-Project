@@ -4,6 +4,7 @@ import com.financetracker.model.Account;
 import com.financetracker.model.Investment;
 import com.financetracker.service.AccountService;
 import com.financetracker.service.InvestmentService;
+import com.financetracker.util.UIUtils;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -117,7 +118,7 @@ public class InvestmentController {
             updateSummary();
         } catch (Exception e) {
             logger.error("Error loading investment data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load investment data: " + e.getMessage());
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to load investment data: " + e.getMessage());
         }
     }
 
@@ -155,7 +156,7 @@ public class InvestmentController {
     private void handleEditInvestment() {
         Investment selected = investmentTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an investment to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an investment to edit.");
             return;
         }
         showInvestmentDialog(selected);
@@ -165,7 +166,7 @@ public class InvestmentController {
     private void handleDeleteInvestment() {
         Investment selected = investmentTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an investment to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an investment to delete.");
             return;
         }
 
@@ -180,9 +181,9 @@ public class InvestmentController {
             if (investmentService.deleteInvestment(selected.getInvestmentId())) {
                 investmentList.remove(selected);
                 updateSummary();
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Investment deleted successfully.");
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Investment deleted successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete investment.");
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete investment.");
             }
         }
     }
@@ -285,28 +286,28 @@ public class InvestmentController {
             if (dialogButton == saveButtonType) {
                 try {
                     if (nameField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Investment name is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Investment name is required.");
                         return null;
                     }
 
                     BigDecimal quantity, purchasePrice, currentPrice;
                     try {
-                        quantity = new BigDecimal(quantityField.getText().replace(",", ""));
-                        purchasePrice = new BigDecimal(purchasePriceField.getText().replace(",", ""));
-                        currentPrice = new BigDecimal(currentPriceField.getText().replace(",", ""));
+                        quantity = UIUtils.parseBigDecimal(quantityField.getText());
+                        purchasePrice = UIUtils.parseBigDecimal(purchasePriceField.getText());
+                        currentPrice = UIUtils.parseBigDecimal(currentPriceField.getText());
                         if (quantity.compareTo(BigDecimal.ZERO) <= 0 || 
                             purchasePrice.compareTo(BigDecimal.ZERO) <= 0 ||
                             currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "All values must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "All values must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid number format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid number format.");
                         return null;
                     }
 
                     if (typeCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Investment type is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Investment type is required.");
                         return null;
                     }
 
@@ -329,7 +330,7 @@ public class InvestmentController {
                     return investment;
                 } catch (Exception e) {
                     logger.error("Error creating investment object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save investment: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save investment: " + e.getMessage());
                     return null;
                 }
             }
@@ -347,22 +348,15 @@ public class InvestmentController {
 
             if (success) {
                 loadInvestmentData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                         "Investment " + (existingInvestment == null ? "added" : "updated") + " successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                         "Failed to " + (existingInvestment == null ? "add" : "update") + " investment.");
             }
         });
     }
 
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     public void setCurrentUserId(UUID userId) {
         this.currentUserId = userId;

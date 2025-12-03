@@ -4,6 +4,7 @@ import com.financetracker.model.Account;
 import com.financetracker.model.Transfer;
 import com.financetracker.service.AccountService;
 import com.financetracker.service.TransferService;
+import com.financetracker.util.UIUtils;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -109,7 +110,7 @@ public class TransferController {
             transferList.setAll(transfers);
         } catch (Exception e) {
             logger.error("Error loading transfer data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load transfer data: " + e.getMessage());
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to load transfer data: " + e.getMessage());
         }
     }
 
@@ -133,7 +134,7 @@ public class TransferController {
     private void handleEditTransfer() {
         Transfer selected = transferTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a transfer to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a transfer to edit.");
             return;
         }
         showTransferDialog(selected);
@@ -143,7 +144,7 @@ public class TransferController {
     private void handleDeleteTransfer() {
         Transfer selected = transferTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a transfer to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a transfer to delete.");
             return;
         }
 
@@ -157,9 +158,9 @@ public class TransferController {
         if (result.isPresent() && result.get() == ButtonType.OK) {
             if (transferService.deleteTransfer(selected.getTransferId())) {
                 transferList.remove(selected);
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Transfer deleted successfully.");
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Transfer deleted successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete transfer.");
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete transfer.");
             }
         }
     }
@@ -168,6 +169,16 @@ public class TransferController {
         Dialog<Transfer> dialog = new Dialog<>();
         dialog.setTitle(existingTransfer == null ? "Add Transfer" : "Edit Transfer");
         dialog.setHeaderText(existingTransfer == null ? "Enter transfer details" : "Update transfer details");
+        
+        // Set owner window to prevent black tab glitch
+        if (transferTable.getScene() != null && transferTable.getScene().getWindow() != null) {
+            dialog.initOwner(transferTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
@@ -251,34 +262,34 @@ public class TransferController {
             if (dialogButton == saveButtonType) {
                 try {
                     if (fromAccountCombo.getValue() == null || toAccountCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Please select both accounts.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Please select both accounts.");
                         return null;
                     }
 
                     if (fromAccountCombo.getValue().getAccountId().equals(toAccountCombo.getValue().getAccountId())) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "From and To accounts must be different.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "From and To accounts must be different.");
                         return null;
                     }
 
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(amountField.getText().replace(",", ""));
+                        amount = UIUtils.parseBigDecimal(amountField.getText());
                         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
                         return null;
                     }
 
                     if (datePicker.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
                         return null;
                     }
 
                     if (typeCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Transfer type is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Transfer type is required.");
                         return null;
                     }
 
@@ -294,7 +305,7 @@ public class TransferController {
                     return transfer;
                 } catch (Exception e) {
                     logger.error("Error creating transfer object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save transfer: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save transfer: " + e.getMessage());
                     return null;
                 }
             }
@@ -313,22 +324,15 @@ public class TransferController {
             if (success) {
                 loadTransferData();
                 loadAccounts(); // Refresh accounts to show updated balances
-                showAlert(Alert.AlertType.INFORMATION, "Success",
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                         "Transfer " + (existingTransfer == null ? "added" : "updated") + " successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                         "Failed to " + (existingTransfer == null ? "add" : "update") + " transfer.");
             }
         });
     }
 
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     public void setCurrentUserId(UUID userId) {
         this.currentUserId = userId;

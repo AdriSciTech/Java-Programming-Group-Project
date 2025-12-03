@@ -16,7 +16,7 @@
 
     <!-- Header Section -->
     <VBox spacing="5">
-        <Label text="Analytics & Reports" styleClass="page-title">
+        <Label text="Analytics &amp; Reports" styleClass="page-title">
             <font><Font size="24" name="System Bold"/></font>
         </Label>
         <Label text="Visualize your financial data" styleClass="subtitle">

@@ -1,5 +1,7 @@
 package com.financetracker.util;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import okhttp3.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -8,7 +10,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +32,8 @@ public class SupabaseClient {
     private String currentUserId;
     private String currentUserEmail;
 
+    private HikariDataSource dataSource;
+
     private SupabaseClient() {
         ConfigManager config = ConfigManager.getInstance();
         this.supabaseUrl = config.getSupabaseUrl();
@@ -38,6 +41,19 @@ public class SupabaseClient {
         this.dbUrl = config.getDbUrl();
         this.dbUsername = config.getDbUsername();
         this.dbPassword = config.getDbPassword();
+        
+        // Validate configuration
+        if (supabaseUrl == null || supabaseUrl.contains("your-project") || supabaseUrl.isEmpty()) {
+            logger.error("⚠️  SUPABASE CONFIGURATION ERROR ⚠️");
+            logger.error("The application.properties file contains placeholder values!");
+            logger.error("Please update src/main/resources/application.properties with your actual Supabase credentials:");
+            logger.error("  - supabase.url=https://YOUR-PROJECT-ID.supabase.co");
+            logger.error("  - supabase.key=YOUR-ANON-KEY");
+            logger.error("  - db.url=jdbc:postgresql://db.YOUR-PROJECT-ID.supabase.co:5432/postgres");
+            logger.error("  - db.password=YOUR-DATABASE-PASSWORD");
+            logger.error("");
+            logger.error("Get your credentials from: https://app.supabase.com → Your Project → Settings → API");
+        }
 
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -47,7 +63,34 @@ public class SupabaseClient {
 
         this.gson = new Gson();
 
+        // Initialize HikariCP
+        initDataSource();
+
         logger.info("SupabaseClient initialized");
+    }
+
+    private void initDataSource() {
+        if (dbUrl != null && !dbUrl.isEmpty()) {
+            try {
+                HikariConfig hikariConfig = new HikariConfig();
+                hikariConfig.setJdbcUrl(dbUrl);
+                hikariConfig.setUsername(dbUsername);
+                hikariConfig.setPassword(dbPassword);
+                hikariConfig.setDriverClassName("org.postgresql.Driver");
+                
+                // Optimization settings
+                hikariConfig.setMaximumPoolSize(10);
+                hikariConfig.setMinimumIdle(2);
+                hikariConfig.setIdleTimeout(300000); // 5 minutes
+                hikariConfig.setConnectionTimeout(20000); // 20 seconds
+                hikariConfig.setLeakDetectionThreshold(60000); // 1 minute
+                
+                this.dataSource = new HikariDataSource(hikariConfig);
+                logger.info("Database connection pool initialized");
+            } catch (Exception e) {
+                logger.error("Failed to initialize connection pool", e);
+            }
+        }
     }
 
     public static SupabaseClient getInstance() {
@@ -362,10 +405,15 @@ public class SupabaseClient {
      * Get a database connection
      */
     public Connection getConnection() throws SQLException {
+        if (dataSource != null) {
+            return dataSource.getConnection();
+        }
+        
+        // Fallback for initial connection test or if pool failed
         try {
             Class.forName("org.postgresql.Driver");
-            Connection conn = DriverManager.getConnection(dbUrl, dbUsername, dbPassword);
-            logger.debug("Database connection established");
+            Connection conn = java.sql.DriverManager.getConnection(dbUrl, dbUsername, dbPassword);
+            logger.debug("Direct database connection established (fallback)");
             return conn;
         } catch (ClassNotFoundException e) {
             logger.error("PostgreSQL JDBC Driver not found", e);
@@ -436,5 +484,15 @@ public class SupabaseClient {
     public boolean isConfigured() {
         return supabaseUrl != null && !supabaseUrl.isEmpty() &&
                 dbUrl != null && !dbUrl.isEmpty();
+    }
+    
+    /**
+     * Shutdown connection pool
+     */
+    public void shutdown() {
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+            logger.info("Connection pool closed");
+        }
     }
 }

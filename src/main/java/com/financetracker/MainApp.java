@@ -22,6 +22,10 @@ public class MainApp extends Application {
             primaryStage = stage;
             primaryStage.setTitle("Finance Tracker - Personal Budget Manager");
 
+            // Enable hardware acceleration for better performance
+            System.setProperty("prism.order", "sw");
+            System.setProperty("javafx.animation.fullspeed", "true");
+            
             // Test Supabase connection on startup
             logger.info("Testing Supabase connection...");
             ConnectionTester.validateConfiguration();
@@ -47,7 +51,7 @@ public class MainApp extends Application {
             FXMLLoader loader = new FXMLLoader(MainApp.class.getResource("/fxml/LoginView.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 400, 500);
+            Scene scene = new Scene(root, 450, 650);
             scene.getStylesheets().add(MainApp.class.getResource("/css/style.css").toExternalForm());
 
             primaryStage.setScene(scene);
@@ -69,6 +73,10 @@ public class MainApp extends Application {
 
             Scene scene = new Scene(root, 1200, 800);
             scene.getStylesheets().add(MainApp.class.getResource("/css/style.css").toExternalForm());
+            
+            // Enable hardware acceleration for better performance
+            scene.getRoot().setCache(true);
+            scene.getRoot().setCacheHint(javafx.scene.CacheHint.SPEED);
 
             primaryStage.setScene(scene);
             primaryStage.setResizable(true);

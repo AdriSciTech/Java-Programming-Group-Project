@@ -4,6 +4,7 @@ import com.financetracker.model.Budget;
 import com.financetracker.model.Category;
 import com.financetracker.service.BudgetService;
 import com.financetracker.service.CategoryService;
+import com.financetracker.util.UIUtils;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -131,7 +132,7 @@ public class BudgetController {
             checkAlerts();
         } catch (Exception e) {
             logger.error("Error loading budget data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load budget data: " + e.getMessage());
+            UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to load budget data: " + e.getMessage());
         }
     }
 
@@ -144,10 +145,10 @@ public class BudgetController {
             String status = budget.getStatus();
             
             if (status.equals("EXCEEDED")) {
-                showAlert(Alert.AlertType.WARNING, "Budget Exceeded", 
+                UIUtils.showAlert(Alert.AlertType.WARNING, "Budget Exceeded", 
                     "Budget '" + budget.getBudgetName() + "' has been exceeded!");
             } else if (status.equals("DANGER")) {
-                showAlert(Alert.AlertType.WARNING, "Budget Warning", 
+                UIUtils.showAlert(Alert.AlertType.WARNING, "Budget Warning", 
                     "Budget '" + budget.getBudgetName() + "' is at " + String.format("%.1f%%", percentage) + "!");
             } else if (status.equals("WARNING")) {
                 // Silent warning - just log
@@ -165,7 +166,7 @@ public class BudgetController {
     private void handleEditBudget() {
         Budget selected = budgetTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a budget to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a budget to edit.");
             return;
         }
         showBudgetDialog(selected);
@@ -175,7 +176,7 @@ public class BudgetController {
     private void handleDeleteBudget() {
         Budget selected = budgetTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a budget to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a budget to delete.");
             return;
         }
 
@@ -189,9 +190,9 @@ public class BudgetController {
         if (result.isPresent() && result.get() == ButtonType.OK) {
             if (budgetService.deleteBudget(selected.getBudgetId())) {
                 budgetList.remove(selected);
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Budget deleted successfully.");
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Budget deleted successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete budget.");
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete budget.");
             }
         }
     }
@@ -203,6 +204,16 @@ public class BudgetController {
         Dialog<Budget> dialog = new Dialog<>();
         dialog.setTitle(existingBudget == null ? "Add Budget" : "Edit Budget");
         dialog.setHeaderText(existingBudget == null ? "Enter budget details" : "Update budget details");
+        
+        // Set owner window to prevent black tab glitch
+        if (budgetTable.getScene() != null && budgetTable.getScene().getWindow() != null) {
+            dialog.initOwner(budgetTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
@@ -280,19 +291,19 @@ public class BudgetController {
             if (dialogButton == saveButtonType) {
                 try {
                     if (nameField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Budget name is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Budget name is required.");
                         return null;
                     }
 
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(amountField.getText().replace(",", ""));
+                        amount = UIUtils.parseBigDecimal(amountField.getText());
                         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
                         return null;
                     }
 
@@ -300,21 +311,21 @@ public class BudgetController {
                     try {
                         threshold = Integer.parseInt(thresholdField.getText());
                         if (threshold < 0 || threshold > 100) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Threshold must be between 0 and 100.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Threshold must be between 0 and 100.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid threshold format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid threshold format.");
                         return null;
                     }
 
                     if (startDatePicker.getValue() == null || endDatePicker.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Start date and end date are required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Start date and end date are required.");
                         return null;
                     }
 
                     if (periodCombo.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Period is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Period is required.");
                         return null;
                     }
 
@@ -335,7 +346,7 @@ public class BudgetController {
                     return budget;
                 } catch (Exception e) {
                     logger.error("Error creating budget object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save budget: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save budget: " + e.getMessage());
                     return null;
                 }
             }
@@ -353,22 +364,15 @@ public class BudgetController {
 
             if (success) {
                 loadBudgetData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
+                UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                         "Budget " + (existingBudget == null ? "added" : "updated") + " successfully.");
             } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                         "Failed to " + (existingBudget == null ? "add" : "update") + " budget.");
             }
         });
     }
 
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     public void setCurrentUserId(UUID userId) {
         this.currentUserId = userId;

@@ -4,15 +4,17 @@ import com.financetracker.model.Category;
 import com.financetracker.model.Income;
 import com.financetracker.service.CategoryService;
 import com.financetracker.service.IncomeService;
+import com.financetracker.util.UIUtils;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.control.Button;
 import javafx.geometry.Insets;
 import javafx.util.StringConverter;
 import org.slf4j.Logger;
@@ -179,17 +181,26 @@ public class IncomeController {
             return;
         }
 
-        try {
-            // Load categories for dropdown
-            incomeCategories = categoryService.getIncomeCategories(currentUserId);
+        Task<Void> loadTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                // Load categories for dropdown
+                incomeCategories = categoryService.getIncomeCategories(currentUserId);
+                
+                // Apply current filter (which will trigger data load)
+                Platform.runLater(() -> applyFilter());
+                return null;
+            }
+        };
 
-            // Apply current filter
-            applyFilter();
+        loadTask.setOnFailed(e -> {
+            logger.error("Error loading income data", loadTask.getException());
+            Platform.runLater(() -> 
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to load income data: " + loadTask.getException().getMessage())
+            );
+        });
 
-        } catch (Exception e) {
-            logger.error("Error loading income data", e);
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load income data: " + e.getMessage());
-        }
+        new Thread(loadTask).start();
     }
 
     /**
@@ -238,11 +249,30 @@ public class IncomeController {
         if (fromDatePicker != null) fromDatePicker.setValue(startDate);
         if (toDatePicker != null) toDatePicker.setValue(endDate);
 
-        // Load filtered data
-        List<Income> filteredIncome = incomeService.getIncomeByDateRange(currentUserId, startDate, endDate);
-        incomeList.setAll(filteredIncome);
+        // Load filtered data in background thread
+        final LocalDate finalStart = startDate;
+        final LocalDate finalEnd = endDate;
+        
+        Task<List<Income>> filterTask = new Task<List<Income>>() {
+            @Override
+            protected List<Income> call() throws Exception {
+                return incomeService.getIncomeByDateRange(currentUserId, finalStart, finalEnd);
+            }
+        };
 
-        updateSummary();
+        filterTask.setOnSucceeded(e -> {
+            List<Income> filteredIncome = filterTask.getValue();
+            Platform.runLater(() -> {
+                incomeList.setAll(filteredIncome);
+                updateSummary();
+            });
+        });
+        
+        filterTask.setOnFailed(e -> {
+            logger.error("Error loading filtered income", filterTask.getException());
+        });
+
+        new Thread(filterTask).start();
     }
 
     /**
@@ -254,8 +284,22 @@ public class IncomeController {
             return;
         }
 
-        List<Income> searchResults = incomeService.searchIncomeBySource(currentUserId, searchText);
-        incomeList.setAll(searchResults);
+        Task<List<Income>> searchTask = new Task<List<Income>>() {
+            @Override
+            protected List<Income> call() throws Exception {
+                return incomeService.searchIncomeBySource(currentUserId, searchText);
+            }
+        };
+
+        searchTask.setOnSucceeded(e -> {
+            List<Income> searchResults = searchTask.getValue();
+            Platform.runLater(() -> {
+                incomeList.setAll(searchResults);
+                updateSummary(); // Summary should update based on visible items
+            });
+        });
+
+        new Thread(searchTask).start();
     }
 
     /**
@@ -264,26 +308,40 @@ public class IncomeController {
     private void updateSummary() {
         if (currentUserId == null) return;
 
-        LocalDate now = LocalDate.now();
-        LocalDate monthStart = now.withDayOfMonth(1);
-        LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
-
-        // Calculate monthly income
-        BigDecimal monthlyTotal = incomeService.getTotalIncome(currentUserId, monthStart, monthEnd);
-        if (monthlyIncomeLabel != null) {
-            monthlyIncomeLabel.setText(String.format("$%,.2f", monthlyTotal));
-        }
-
-        // Calculate total from current filter/table
+        // Calculate total from current filter/table (fast, in-memory)
         BigDecimal tableTotal = BigDecimal.ZERO;
         for (Income income : incomeList) {
             if (income != null && income.getAmount() != null) {
                 tableTotal = tableTotal.add(income.getAmount());
             }
         }
+        
+        final BigDecimal finalTableTotal = tableTotal;
         if (totalIncomeLabel != null) {
-            totalIncomeLabel.setText(String.format("$%,.2f", tableTotal));
+            totalIncomeLabel.setText(String.format("$%,.2f", finalTableTotal));
         }
+
+        // Calculate monthly income in background
+        Task<BigDecimal> monthlyTask = new Task<BigDecimal>() {
+            @Override
+            protected BigDecimal call() throws Exception {
+                LocalDate now = LocalDate.now();
+                LocalDate monthStart = now.withDayOfMonth(1);
+                LocalDate monthEnd = now.withDayOfMonth(now.lengthOfMonth());
+                return incomeService.getTotalIncome(currentUserId, monthStart, monthEnd);
+            }
+        };
+
+        monthlyTask.setOnSucceeded(e -> {
+            BigDecimal monthlyTotal = monthlyTask.getValue();
+            Platform.runLater(() -> {
+                if (monthlyIncomeLabel != null) {
+                    monthlyIncomeLabel.setText(String.format("$%,.2f", monthlyTotal));
+                }
+            });
+        });
+
+        new Thread(monthlyTask).start();
     }
 
     /**
@@ -302,7 +360,7 @@ public class IncomeController {
     private void handleEditIncome() {
         Income selected = incomeTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an income entry to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an income entry to edit.");
             return;
         }
         showIncomeDialog(selected);
@@ -315,7 +373,7 @@ public class IncomeController {
     private void handleDeleteIncome() {
         Income selected = incomeTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an income entry to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an income entry to delete.");
             return;
         }
 
@@ -328,13 +386,34 @@ public class IncomeController {
 
         Optional<ButtonType> result = confirm.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            if (incomeService.deleteIncome(selected.getIncomeId())) {
-                incomeList.remove(selected);
-                updateSummary();
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Income entry deleted successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete income entry.");
-            }
+            Task<Boolean> deleteTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    return incomeService.deleteIncome(selected.getIncomeId());
+                }
+            };
+
+            deleteTask.setOnSucceeded(e -> {
+                boolean success = deleteTask.getValue();
+                Platform.runLater(() -> {
+                    if (success) {
+                        incomeList.remove(selected);
+                        updateSummary();
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Income entry deleted successfully.");
+                    } else {
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete income entry.");
+                    }
+                });
+            });
+            
+            deleteTask.setOnFailed(e -> {
+                logger.error("Error deleting income", deleteTask.getException());
+                Platform.runLater(() -> 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete income: " + deleteTask.getException().getMessage())
+                );
+            });
+
+            new Thread(deleteTask).start();
         }
     }
 
@@ -353,6 +432,16 @@ public class IncomeController {
         Dialog<Income> dialog = new Dialog<>();
         dialog.setTitle(existingIncome == null ? "Add Income" : "Edit Income");
         dialog.setHeaderText(existingIncome == null ? "Enter income details" : "Update income details");
+        
+        // Set owner window to prevent black tab glitch
+        if (incomeTable.getScene() != null && incomeTable.getScene().getWindow() != null) {
+            dialog.initOwner(incomeTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         // Set button types
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
@@ -374,7 +463,9 @@ public class IncomeController {
         DatePicker datePicker = new DatePicker(LocalDate.now());
 
         ComboBox<Category> categoryCombo = new ComboBox<>();
-        categoryCombo.setItems(FXCollections.observableArrayList(incomeCategories));
+        if (incomeCategories != null) {
+            categoryCombo.setItems(FXCollections.observableArrayList(incomeCategories));
+        }
         categoryCombo.setConverter(new StringConverter<Category>() {
             @Override
             public String toString(Category category) {
@@ -428,7 +519,7 @@ public class IncomeController {
             frequencyCombo.setValue(existingIncome.getRecurringFrequency());
 
             // Find and select category
-            if (existingIncome.getCategoryId() != null) {
+            if (existingIncome.getCategoryId() != null && incomeCategories != null) {
                 for (Category cat : incomeCategories) {
                     if (cat.getCategoryId().equals(existingIncome.getCategoryId())) {
                         categoryCombo.setValue(cat);
@@ -460,24 +551,24 @@ public class IncomeController {
                 try {
                     // Validate
                     if (sourceField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Source is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Source is required.");
                         return null;
                     }
 
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(amountField.getText().replace(",", ""));
+                        amount = UIUtils.parseBigDecimal(amountField.getText());
                         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
                         return null;
                     }
 
                     if (datePicker.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
                         return null;
                     }
 
@@ -498,7 +589,7 @@ public class IncomeController {
                     return income;
                 } catch (Exception e) {
                     logger.error("Error creating income object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save income: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save income: " + e.getMessage());
                     return null;
                 }
             }
@@ -508,21 +599,39 @@ public class IncomeController {
         // Show dialog and process result
         Optional<Income> result = dialog.showAndWait();
         result.ifPresent(income -> {
-            boolean success;
-            if (existingIncome == null) {
-                success = incomeService.createIncome(income);
-            } else {
-                success = incomeService.updateIncome(income);
-            }
+            Task<Boolean> saveTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    if (existingIncome == null) {
+                        return incomeService.createIncome(income);
+                    } else {
+                        return incomeService.updateIncome(income);
+                    }
+                }
+            };
 
-            if (success) {
-                loadIncomeData();
-                showAlert(Alert.AlertType.INFORMATION, "Success",
-                        "Income " + (existingIncome == null ? "added" : "updated") + " successfully.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Error",
-                        "Failed to " + (existingIncome == null ? "add" : "update") + " income.");
-            }
+            saveTask.setOnSucceeded(e -> {
+                boolean success = saveTask.getValue();
+                Platform.runLater(() -> {
+                    if (success) {
+                        loadIncomeData();
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
+                                "Income " + (existingIncome == null ? "added" : "updated") + " successfully.");
+                    } else {
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
+                                "Failed to " + (existingIncome == null ? "add" : "update") + " income.");
+                    }
+                });
+            });
+            
+            saveTask.setOnFailed(e -> {
+                logger.error("Error saving income", saveTask.getException());
+                Platform.runLater(() -> 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save income: " + saveTask.getException().getMessage())
+                );
+            });
+
+            new Thread(saveTask).start();
         });
     }
 
@@ -564,13 +673,14 @@ public class IncomeController {
             if (dialogButton == saveButtonType) {
                 String categoryName = nameField.getText().trim();
                 if (categoryName.isEmpty()) {
-                    showAlert(Alert.AlertType.ERROR, "Validation Error", "Category name is required.");
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Category name is required.");
                     return null;
                 }
 
-                // Check if category already exists
+                // Note: Checking existence synchronously here as it's a light check
+                // Ideally move this to background too if it becomes slow
                 if (categoryService.categoryNameExists(currentUserId, categoryName, categoryType)) {
-                    showAlert(Alert.AlertType.ERROR, "Validation Error", 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", 
                             "A category with this name already exists for " + categoryType.name().toLowerCase() + ".");
                     return null;
                 }
@@ -587,7 +697,7 @@ public class IncomeController {
                 if (categoryService.createCategory(category)) {
                     return category;
                 } else {
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to create category.");
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to create category.");
                     return null;
                 }
             }
@@ -598,16 +708,6 @@ public class IncomeController {
         return result.orElse(null);
     }
 
-    /**
-     * Show alert dialog
-     */
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     /**
      * Set the current user ID (called from DashboardController)

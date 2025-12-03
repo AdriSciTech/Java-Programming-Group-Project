@@ -100,6 +100,9 @@
             <Label fx:id="nextBillLabel" text="No upcoming bills" styleClass="card-value" wrapText="true">
                 <font><Font size="14"/></font>
             </Label>
+            <Label text="Add bills in the Bills section to track recurring payments" styleClass="placeholder-text" wrapText="true">
+                <font><Font size="12"/></font>
+            </Label>
         </VBox>
 
         <!-- Mini Pie Chart -->

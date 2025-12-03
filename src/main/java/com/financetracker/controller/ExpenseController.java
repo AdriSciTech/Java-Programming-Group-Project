@@ -4,6 +4,7 @@ import com.financetracker.model.Category;
 import com.financetracker.model.Expense;
 import com.financetracker.service.CategoryService;
 import com.financetracker.service.ExpenseService;
+import com.financetracker.util.UIUtils;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -186,7 +187,7 @@ public class ExpenseController {
         loadTask.setOnFailed(e -> {
             logger.error("Error loading expense data", loadTask.getException());
             Platform.runLater(() -> {
-                showAlert(Alert.AlertType.ERROR, "Error", 
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                     "Failed to load expense data: " + loadTask.getException().getMessage());
             });
         });
@@ -264,7 +265,7 @@ public class ExpenseController {
         filterTask.setOnFailed(e -> {
             logger.error("Error filtering expenses", filterTask.getException());
             Platform.runLater(() -> {
-                showAlert(Alert.AlertType.ERROR, "Error", 
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                     "Failed to filter expenses: " + filterTask.getException().getMessage());
             });
         });
@@ -301,7 +302,7 @@ public class ExpenseController {
         searchTask.setOnFailed(e -> {
             logger.error("Error searching expenses", searchTask.getException());
             Platform.runLater(() -> {
-                showAlert(Alert.AlertType.ERROR, "Error", 
+                UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                     "Failed to search expenses: " + searchTask.getException().getMessage());
             });
         });
@@ -366,7 +367,7 @@ public class ExpenseController {
     private void handleEditExpense() {
         Expense selected = expenseTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an expense entry to edit.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an expense entry to edit.");
             return;
         }
         showExpenseDialog(selected);
@@ -379,7 +380,7 @@ public class ExpenseController {
     private void handleDeleteExpense() {
         Expense selected = expenseTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an expense entry to delete.");
+            UIUtils.showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an expense entry to delete.");
             return;
         }
 
@@ -409,9 +410,9 @@ public class ExpenseController {
                         expenseList.remove(selected);
                         expenseTable.refresh();
                         updateSummary();
-                        showAlert(Alert.AlertType.INFORMATION, "Success", "Expense entry deleted successfully.");
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Expense entry deleted successfully.");
                     } else {
-                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete expense entry.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete expense entry.");
                     }
                 });
             });
@@ -419,7 +420,7 @@ public class ExpenseController {
             deleteTask.setOnFailed(e -> {
                 logger.error("Error deleting expense", deleteTask.getException());
                 Platform.runLater(() -> {
-                    showAlert(Alert.AlertType.ERROR, "Error", 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", 
                         "Failed to delete expense: " + deleteTask.getException().getMessage());
                 });
             });
@@ -443,6 +444,16 @@ public class ExpenseController {
         Dialog<Expense> dialog = new Dialog<>();
         dialog.setTitle(existingExpense == null ? "Add Expense" : "Edit Expense");
         dialog.setHeaderText(existingExpense == null ? "Enter expense details" : "Update expense details");
+        
+        // Set owner window to prevent black tab glitch
+        if (expenseTable.getScene() != null && expenseTable.getScene().getWindow() != null) {
+            dialog.initOwner(expenseTable.getScene().getWindow());
+        }
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        
+        // Apply stylesheet
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/style.css").toExternalForm());
+        dialog.getDialogPane().getStyleClass().add("dialog-pane");
 
         // Set button types
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
@@ -540,24 +551,24 @@ public class ExpenseController {
                 try {
                     // Validate
                     if (vendorField.getText().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Vendor is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Vendor is required.");
                         return null;
                     }
 
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(amountField.getText().replace(",", ""));
+                        amount = UIUtils.parseBigDecimal(amountField.getText());
                         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                            showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
+                            UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Amount must be greater than 0.");
                             return null;
                         }
                     } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Invalid amount format.");
                         return null;
                     }
 
                     if (datePicker.getValue() == null) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Date is required.");
                         return null;
                     }
 
@@ -577,7 +588,7 @@ public class ExpenseController {
                     return expense;
                 } catch (Exception e) {
                     logger.error("Error creating expense object", e);
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save expense: " + e.getMessage());
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to save expense: " + e.getMessage());
                     return null;
                 }
             }
@@ -604,12 +615,12 @@ public class ExpenseController {
                 if (success) {
                     loadExpenseData();
                     Platform.runLater(() -> {
-                        showAlert(Alert.AlertType.INFORMATION, "Success",
+                        UIUtils.showAlert(Alert.AlertType.INFORMATION, "Success",
                                 "Expense " + (existingExpense == null ? "added" : "updated") + " successfully.");
                     });
                 } else {
                     Platform.runLater(() -> {
-                        showAlert(Alert.AlertType.ERROR, "Error",
+                        UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                                 "Failed to " + (existingExpense == null ? "add" : "update") + " expense.");
                     });
                 }
@@ -618,7 +629,7 @@ public class ExpenseController {
             saveTask.setOnFailed(e -> {
                 logger.error("Error saving expense", saveTask.getException());
                 Platform.runLater(() -> {
-                    showAlert(Alert.AlertType.ERROR, "Error",
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error",
                             "Failed to save expense: " + saveTask.getException().getMessage());
                 });
             });
@@ -665,13 +676,13 @@ public class ExpenseController {
             if (dialogButton == saveButtonType) {
                 String categoryName = nameField.getText().trim();
                 if (categoryName.isEmpty()) {
-                    showAlert(Alert.AlertType.ERROR, "Validation Error", "Category name is required.");
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", "Category name is required.");
                     return null;
                 }
 
                 // Check if category already exists
                 if (categoryService.categoryNameExists(currentUserId, categoryName, categoryType)) {
-                    showAlert(Alert.AlertType.ERROR, "Validation Error", 
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Validation Error", 
                             "A category with this name already exists for " + categoryType.name().toLowerCase() + ".");
                     return null;
                 }
@@ -688,7 +699,7 @@ public class ExpenseController {
                 if (categoryService.createCategory(category)) {
                     return category;
                 } else {
-                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to create category.");
+                    UIUtils.showAlert(Alert.AlertType.ERROR, "Error", "Failed to create category.");
                     return null;
                 }
             }
@@ -702,13 +713,6 @@ public class ExpenseController {
     /**
      * Show alert dialog
      */
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
 
     /**
      * Set the current user ID (called from DashboardController)
